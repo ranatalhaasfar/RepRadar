@@ -4,7 +4,7 @@
   "framework": "vite",
   "functions": {
     "api/outscraper-search.js":  { "maxDuration": 60 },
-    "api/outscraper-reviews.js": { "maxDuration": 60 },
+    "api/outscraper-reviews.js": { "maxDuration": 300 },
     "api/analyze-reviews.js":    { "maxDuration": 30 },
     "api/generate-insights.js":  { "maxDuration": 30 }
   },
