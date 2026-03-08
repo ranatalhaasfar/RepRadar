@@ -1,23 +1,12 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-
-// ── Types ──────────────────────────────────────────────────────────────────
-
-type Impact = 'High' | 'Medium' | 'Low'
-type Category = 'Service' | 'Food' | 'Pricing' | 'Ambiance' | 'Trending' | 'Opportunity'
-
-type Insight = {
-  id: number
-  icon: string
-  category: Category
-  title: string
-  description: string
-  recommendation: string
-  impact: Impact
-}
+import { useAppData } from '../context/AppDataContext'
+import type { Insight } from '../context/AppDataContext'
 
 // ── Styles ──────────────────────────────────────────────────────────────────
+
+type Impact   = 'High' | 'Medium' | 'Low'
+type Category = 'Service' | 'Food' | 'Pricing' | 'Ambiance' | 'Trending' | 'Opportunity'
 
 const IMPACT_STYLES: Record<Impact, string> = {
   High:   'bg-red-500/20 text-red-400 border border-red-500/30',
@@ -47,10 +36,10 @@ function InsightCard({ insight, expanded, onToggle }: {
         <span className="text-2xl">{insight.icon}</span>
         <div>
           <div className="flex items-center gap-2 flex-wrap mb-1">
-            <span className={`badge text-xs ${CATEGORY_STYLES[insight.category]}`}>
+            <span className={`badge text-xs ${CATEGORY_STYLES[insight.category as Category]}`}>
               {insight.category}
             </span>
-            <span className={`badge ${IMPACT_STYLES[insight.impact]}`}>
+            <span className={`badge ${IMPACT_STYLES[insight.impact as Impact]}`}>
               {insight.impact} Impact
             </span>
           </div>
@@ -95,142 +84,20 @@ function formatAnalyzedAt(ts: string): string {
 
 export default function AIInsights() {
   const { user } = useAuth()
-  const [insights, setInsights]     = useState<Insight[]>([])
-  const [noReviews, setNoReviews]   = useState(false)
-  const [expanded, setExpanded]     = useState<Set<number>>(new Set())
-  const [loading, setLoading]       = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [analyzedAt, setAnalyzedAt] = useState<string | null>(null)
-  const [filter, setFilter]         = useState<'All' | Impact>('All')
-  const [error, setError]           = useState('')
-  const [fromCache, setFromCache]   = useState(false)
+  const {
+    insights, noReviews, insightsLoading, insightsRefreshing,
+    analyzedAt, insightsError, insightsFromCache,
+    loadInsights, refreshInsights,
+  } = useAppData()
 
-  // On mount: ONLY load from cache — never call Anthropic automatically
+  // UI-only state: which cards are expanded (does not need to be global)
+  const [filter,   setFilter]   = useState<'All' | Impact>('All')
+  const [expanded, setExpanded] = useState<Set<number>>(new Set())
+
+  // Load once — context guard prevents re-fetch on auth token refresh
   useEffect(() => {
-    if (user) loadFromCache()
-  }, [user])
-
-  // ── Load from Supabase cache only — zero Anthropic calls ─────────────────
-
-  const loadFromCache = async () => {
-    setLoading(true)
-    setError('')
-    try {
-      const { data: bizData, error: bizErr } = await supabase
-        .from('businesses')
-        .select('id, name, type')
-        .eq('user_id', user!.id)
-        .limit(1)
-        .maybeSingle()
-      if (bizErr) throw new Error(`Business load error: ${bizErr.message}`)
-      if (!bizData) { setInsights([]); return }
-
-      const { data: cached, error: cacheErr } = await supabase
-        .from('insights')
-        .select('*')
-        .eq('business_id', bizData.id)
-        .order('created_at', { ascending: false })
-
-      if (cacheErr) {
-        console.error('[AIInsights] Cache read error:', cacheErr.message)
-        throw new Error(`Cache error: ${cacheErr.message}. Run the DB migration to create the insights table.`)
-      }
-
-      if (cached && cached.length > 0) {
-        console.log('[AIInsights] ✅ Loaded from cache — NO Anthropic call')
-        setInsights(cached.map((row, i) => ({
-          id: i,
-          icon:           row.icon ?? '💡',
-          category:       row.category as Category,
-          title:          row.title,
-          description:    row.description,
-          recommendation: row.recommendation,
-          impact:         row.impact as Impact,
-        })))
-        setAnalyzedAt(cached[0].created_at)
-        setFromCache(true)
-      } else {
-        // No cached insights — check if reviews exist so we can show the right empty state
-        const { count } = await supabase
-          .from('reviews')
-          .select('id', { count: 'exact', head: true })
-          .eq('business_id', bizData.id)
-        setNoReviews((count ?? 0) === 0)
-        setInsights([])
-      }
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load insights')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // ── Refresh: called ONLY when user clicks the button ─────────────────────
-
-  const refreshInsights = async () => {
-    setRefreshing(true)
-    setError('')
-    try {
-      const { data: bizData, error: bizErr } = await supabase
-        .from('businesses')
-        .select('id, name, type')
-        .eq('user_id', user!.id)
-        .limit(1)
-        .maybeSingle()
-      if (bizErr) throw new Error(`Business load error: ${bizErr.message}`)
-      if (!bizData) return
-
-      const { data: revData, error: revErr } = await supabase
-        .from('reviews')
-        .select('review_text')
-        .eq('business_id', bizData.id)
-      if (revErr) throw new Error(`Reviews load error: ${revErr.message}`)
-
-      const texts = (revData ?? []).map(r => r.review_text)
-      if (texts.length === 0) {
-        setNoReviews(true)
-        setInsights([])
-        return
-      }
-
-      console.log('[AIInsights] 🌐 User clicked Refresh — calling Anthropic API')
-      const res = await fetch('/api/generate-insights', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ businessName: bizData.name, businessType: bizData.type, reviews: texts }),
-      })
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({ error: res.statusText }))
-        throw new Error(errData.error ?? 'Failed to generate insights')
-      }
-      const data = await res.json()
-      const rawInsights: Omit<Insight, 'id'>[] = data.insights ?? []
-
-      // Save to DB (replace old rows)
-      await supabase.from('insights').delete().eq('business_id', bizData.id)
-      const now = new Date().toISOString()
-      const rows = rawInsights.map(ins => ({
-        business_id: bizData.id, user_id: user!.id,
-        icon: ins.icon, category: ins.category, title: ins.title,
-        description: ins.description, recommendation: ins.recommendation,
-        impact: ins.impact, created_at: now,
-      }))
-      if (rows.length > 0) {
-        const { error: insertErr } = await supabase.from('insights').insert(rows)
-        if (insertErr) console.error('[AIInsights] ❌ insert error:', insertErr.message)
-        else console.log('[AIInsights] ✅ Insights saved to DB —', rows.length, 'rows')
-      }
-
-      setInsights(rawInsights.map((ins, i) => ({ ...ins, id: i })))
-      setAnalyzedAt(now)
-      setFromCache(false)
-      setNoReviews(false)
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to generate insights')
-    } finally {
-      setRefreshing(false)
-    }
-  }
+    if (user) loadInsights()
+  }, [user?.id])  // key on user.id (stable string), not user object
 
   const toggle = (id: number) => {
     setExpanded(prev => {
@@ -242,9 +109,9 @@ export default function AIInsights() {
 
   const filtered = filter === 'All' ? insights : insights.filter(i => i.impact === filter)
 
-  // ── Loading state ──────────────────────────────────────────────────────
+  // ── Loading state ───────────────────────────────────────────────────────
 
-  if (loading) {
+  if (insightsLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3 text-gray-500 text-sm">
         <svg className="animate-spin h-6 w-6 text-purple-400" viewBox="0 0 24 24" fill="none">
@@ -267,7 +134,7 @@ export default function AIInsights() {
           <h1 className="text-xl sm:text-2xl font-bold text-gray-100">AI Insights</h1>
           {analyzedAt ? (
             <p className="text-gray-500 text-sm mt-1 flex items-center gap-2 flex-wrap">
-              {fromCache && <span className="text-emerald-600 text-xs">✓ Loaded from cache ·</span>}
+              {insightsFromCache && <span className="text-emerald-600 text-xs">✓ Loaded from cache ·</span>}
               Last updated: {formatAnalyzedAt(analyzedAt)}
             </p>
           ) : (
@@ -278,10 +145,10 @@ export default function AIInsights() {
         </div>
         <button
           onClick={refreshInsights}
-          disabled={refreshing}
+          disabled={insightsRefreshing}
           className="btn-primary w-full sm:w-auto px-4 py-2 min-h-[44px] text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {refreshing ? (
+          {insightsRefreshing ? (
             <>
               <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -294,15 +161,15 @@ export default function AIInsights() {
       </div>
 
       {/* Error */}
-      {error && (
+      {insightsError && (
         <div className="card p-4 text-red-400 text-sm flex items-center gap-3">
-          <span>⚠ {error}</span>
-          <button onClick={loadFromCache} className="underline hover:no-underline">Retry</button>
+          <span>⚠ {insightsError}</span>
+          <button onClick={loadInsights} className="underline hover:no-underline">Retry</button>
         </div>
       )}
 
       {/* Empty state */}
-      {!error && insights.length === 0 && (
+      {!insightsError && insights.length === 0 && (
         <div className="card p-8 text-center">
           <p className="text-3xl mb-3">{noReviews ? '📋' : '🧠'}</p>
           <p className="text-sm text-gray-300 font-medium mb-1">

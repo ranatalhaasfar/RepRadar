@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { AppDataProvider } from './context/AppDataContext'
 import { supabase } from './lib/supabase'
 import Login from './pages/auth/Login'
 import Signup from './pages/auth/Signup'
@@ -343,7 +344,9 @@ function Root() {
 export default function App() {
   return (
     <AuthProvider>
-      <Root />
+      <AppDataProvider>
+        <Root />
+      </AppDataProvider>
     </AuthProvider>
   )
 }
