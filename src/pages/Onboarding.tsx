@@ -61,6 +61,10 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
     setStep(s => s - 1)
   }
 
+  // ── Outscraper limits ───────────────────────────────────────────────────
+
+  const MAX_REVIEWS_FETCH = 200 // Initial onboarding fetch
+
   // ── Step 3: search Google Maps via Outscraper ───────────────────────────
 
   const searchBusiness = async () => {
@@ -121,7 +125,7 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
       const fetchRes = await fetch('/api/outscraper-reviews', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ place_id: searchResult.place_id, limit: 100, sort: 'newest' }),
+        body:    JSON.stringify({ place_id: searchResult.place_id, limit: MAX_REVIEWS_FETCH, sort: 'newest' }),
       })
       if (!fetchRes.ok) {
         const d = await fetchRes.json().catch(() => ({}))

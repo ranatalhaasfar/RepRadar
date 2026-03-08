@@ -7,6 +7,11 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import type { Business, Review } from '../lib/supabase'
 
+// ── Outscraper limits ──────────────────────────────────────────────────────
+
+const MAX_REVIEWS_FETCH    = 200 // Initial / force-refresh fetch
+const MAX_REFRESH_FETCH    = 50  // Weekly automatic refresh
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type AnalysisResult = {
@@ -283,13 +288,20 @@ export default function Dashboard() {
 
   const fetchNewReviews = async () => {
     if (!business?.place_id) return
+
+    // 7-day staleness guard — skip if fetched less than 7 days ago
+    if (!isStale(business.reviews_fetched_at, 7)) {
+      setFetchError('Reviews were fetched less than 7 days ago. Please wait before refreshing again.')
+      return
+    }
+
     setFetchingReviews(true)
     setFetchError('')
     try {
       const res = await fetch('/api/outscraper-reviews', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ place_id: business.place_id, limit: 100, sort: 'newest' }),
+        body:    JSON.stringify({ place_id: business.place_id, limit: MAX_REFRESH_FETCH, sort: 'newest' }),
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))

@@ -7,6 +7,10 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import type { Business } from '../lib/supabase'
 
+// ── Outscraper limits ──────────────────────────────────────────────────────
+
+const MAX_COMPETITOR_FETCH = 200 // Reviews per competitor
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type CompetitorEntry = {
@@ -173,7 +177,7 @@ export default function CompetitorSpy() {
         const revRes = await fetch('/api/outscraper-reviews', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ place_id: searchData.place_id, limit: 50, sort: 'newest' }),
+          body:    JSON.stringify({ place_id: searchData.place_id, limit: MAX_COMPETITOR_FETCH, sort: 'newest' }),
         })
         const revData = revRes.ok ? await revRes.json() : { reviews: [] }
         const fetchedReviews: string[] = (revData.reviews ?? []).map((r: { review_text: string }) => r.review_text)
