@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { useAppStore } from './store/appStore'
 import { supabase } from './lib/supabase'
+import type { Business } from './lib/supabase'
 import Login from './pages/auth/Login'
 import Signup from './pages/auth/Signup'
 import ForgotPassword from './pages/auth/ForgotPassword'
 import Onboarding from './pages/Onboarding'
+import AddBusiness from './pages/AddBusiness'
 import Dashboard from './pages/Dashboard'
 import ReviewResponder from './pages/ReviewResponder'
 import CompetitorSpy from './pages/CompetitorSpy'
@@ -42,14 +44,29 @@ const PAGE_TITLES: Record<Page, string> = {
 
 // ── Sidebar ────────────────────────────────────────────────────────────────
 
-function Sidebar({ active, onNavigate, businessName, userEmail, onSignOut, onClose }: {
+function Sidebar({
+  active,
+  onNavigate,
+  allBusinesses,
+  activeBusiness,
+  onSwitchBusiness,
+  onAddBusiness,
+  userEmail,
+  onSignOut,
+  onClose,
+}: {
   active: Page
   onNavigate: (p: Page) => void
-  businessName: string
+  allBusinesses: Business[]
+  activeBusiness: Business | null
+  onSwitchBusiness: (biz: Business) => void
+  onAddBusiness: () => void
   userEmail: string
   onSignOut: () => void
   onClose?: () => void
 }) {
+  const [switcherOpen, setSwitcherOpen] = useState(false)
+
   const handleNav = (p: Page) => {
     onNavigate(p)
     onClose?.()
@@ -116,17 +133,60 @@ function Sidebar({ active, onNavigate, businessName, userEmail, onSignOut, onClo
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="px-4 py-4 border-t border-[#1e2d4a]">
-        <div className="flex items-center gap-2.5 mb-3">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-            {(businessName || userEmail)[0]?.toUpperCase() ?? 'U'}
+      {/* Footer — business switcher + sign out */}
+      <div className="px-3 py-3 border-t border-[#1e2d4a]">
+
+        {/* Switcher trigger */}
+        <button
+          onClick={() => setSwitcherOpen(o => !o)}
+          className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/5 transition-colors mb-1"
+        >
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+            {(activeBusiness?.name || userEmail)[0]?.toUpperCase() ?? 'U'}
           </div>
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-gray-300 truncate">{businessName || 'My Business'}</p>
+          <div className="min-w-0 flex-1 text-left">
+            <p className="text-xs font-medium text-gray-300 truncate">{activeBusiness?.name ?? 'My Business'}</p>
             <p className="text-[10px] text-gray-600 truncate">{userEmail}</p>
           </div>
-        </div>
+          <svg
+            className={`w-3.5 h-3.5 text-gray-500 shrink-0 transition-transform duration-200 ${switcherOpen ? 'rotate-180' : ''}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {/* Dropdown */}
+        {switcherOpen && (
+          <div className="mb-2 bg-[#080d1a] border border-[#1e2d4a] rounded-xl overflow-hidden">
+            {allBusinesses.map(biz => (
+              <button
+                key={biz.id}
+                onClick={() => { onSwitchBusiness(biz); setSwitcherOpen(false); onClose?.() }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors ${
+                  biz.id === activeBusiness?.id
+                    ? 'bg-purple-600/15 text-purple-300'
+                    : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
+                }`}
+              >
+                <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center text-white text-[9px] font-bold shrink-0">
+                  {biz.name[0]?.toUpperCase() ?? 'B'}
+                </div>
+                <span className="text-xs truncate flex-1">{biz.name}</span>
+                {biz.id === activeBusiness?.id && <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />}
+              </button>
+            ))}
+            <button
+              onClick={() => { setSwitcherOpen(false); onClose?.(); onAddBusiness() }}
+              className="w-full flex items-center gap-2 px-3 py-2.5 border-t border-[#1e2d4a] text-gray-500 hover:text-purple-400 hover:bg-purple-500/5 transition-colors"
+            >
+              <span className="text-base font-light leading-none">+</span>
+              <span className="text-xs">Add Business</span>
+            </button>
+          </div>
+        )}
+
+        {/* Sign out */}
         <button
           onClick={onSignOut}
           className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all border border-transparent hover:border-red-500/20 min-h-[44px]"
@@ -207,25 +267,38 @@ function BottomNav({ active, onNavigate }: { active: Page; onNavigate: (p: Page)
 
 function AuthenticatedApp() {
   const { user, signOut } = useAuth()
-  const clearAll = useAppStore(s => s.clearAll)
+  const clearAll          = useAppStore(s => s.clearAll)
+  const setActiveBusiness = useAppStore(s => s.setActiveBusiness)
+  const setAllBusinesses  = useAppStore(s => s.setAllBusinesses)
+  const activeBusiness    = useAppStore(s => s.activeBusiness)
+  const allBusinesses     = useAppStore(s => s.allBusinesses)
+
   const [page, setPage]               = useState<Page>('dashboard')
   const [hasOnboarded, setHasOnboarded] = useState<boolean | null>(null)
-  const [businessName, setBusinessName] = useState('')
+  const [addingBusiness, setAddingBusiness]   = useState(false)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [sidebarOpen, setSidebarOpen]   = useState(false)
+
+  // ── Load all businesses on mount ─────────────────────────────────────────
 
   useEffect(() => {
     if (!user) return
-    supabase
-      .from('businesses')
-      .select('id, name')
-      .eq('user_id', user.id)
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => {
-        setHasOnboarded(!!data)
-        if (data) setBusinessName(data.name)
-      })
+    loadAllBusinesses()
   }, [user])
+
+  const loadAllBusinesses = async () => {
+    const { data } = await supabase
+      .from('businesses')
+      .select('*')
+      .eq('user_id', user!.id)
+      .order('created_at', { ascending: true })
+    const list: Business[] = (data ?? []) as Business[]
+    setAllBusinesses(list)
+    setHasOnboarded(list.length > 0)
+    if (list.length > 0 && !activeBusiness) setActiveBusiness(list[0])
+  }
+
+  // ── Handlers ─────────────────────────────────────────────────────────────
 
   const handleSignOut = () => {
     clearAll()
@@ -233,15 +306,42 @@ function AuthenticatedApp() {
   }
 
   const handleOnboardingComplete = async () => {
-    const { data } = await supabase
-      .from('businesses')
-      .select('name')
-      .eq('user_id', user!.id)
-      .limit(1)
-      .maybeSingle()
-    if (data) setBusinessName(data.name)
+    await loadAllBusinesses()
     setHasOnboarded(true)
   }
+
+  const handleAddBusinessComplete = async (newBiz: Business) => {
+    const { data } = await supabase
+      .from('businesses')
+      .select('*')
+      .eq('user_id', user!.id)
+      .order('created_at', { ascending: true })
+    const list: Business[] = (data ?? []) as Business[]
+    clearAll()
+    setAllBusinesses(list)
+    setActiveBusiness(newBiz)
+    setAddingBusiness(false)
+  }
+
+  const handleSwitchBusiness = (biz: Business) => {
+    if (biz.id === activeBusiness?.id) return
+    const snapshot = allBusinesses
+    clearAll()
+    setAllBusinesses(snapshot)
+    setActiveBusiness(biz)
+    setPage('dashboard')
+  }
+
+  const handleAddBusinessClick = () => {
+    const FREE_LIMIT = 1
+    if (allBusinesses.length >= FREE_LIMIT) {
+      setShowUpgradeModal(true)
+    } else {
+      setAddingBusiness(true)
+    }
+  }
+
+  // ── Loading state ─────────────────────────────────────────────────────────
 
   if (hasOnboarded === null) {
     return (
@@ -258,6 +358,24 @@ function AuthenticatedApp() {
     return <Onboarding onComplete={handleOnboardingComplete} />
   }
 
+  // ── Add Business inline flow ──────────────────────────────────────────────
+
+  if (addingBusiness) {
+    return (
+      <div className="min-h-screen bg-[#080d1a]">
+        <div className="lg:ml-60 flex flex-col min-h-screen">
+          <TopBar page={page} onMenuOpen={() => {}} />
+          <main className="flex-1 p-4 md:p-6 overflow-auto">
+            <AddBusiness
+              onComplete={handleAddBusinessComplete}
+              onCancel={() => setAddingBusiness(false)}
+            />
+          </main>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-[#080d1a]">
 
@@ -266,7 +384,10 @@ function AuthenticatedApp() {
         <Sidebar
           active={page}
           onNavigate={setPage}
-          businessName={businessName}
+          allBusinesses={allBusinesses}
+          activeBusiness={activeBusiness}
+          onSwitchBusiness={handleSwitchBusiness}
+          onAddBusiness={handleAddBusinessClick}
           userEmail={user?.email ?? ''}
           onSignOut={handleSignOut}
         />
@@ -285,7 +406,10 @@ function AuthenticatedApp() {
             <Sidebar
               active={page}
               onNavigate={setPage}
-              businessName={businessName}
+              allBusinesses={allBusinesses}
+              activeBusiness={activeBusiness}
+              onSwitchBusiness={handleSwitchBusiness}
+              onAddBusiness={handleAddBusinessClick}
               userEmail={user?.email ?? ''}
               onSignOut={handleSignOut}
               onClose={() => setSidebarOpen(false)}
@@ -312,6 +436,26 @@ function AuthenticatedApp() {
 
       {/* ── Mobile bottom nav ── */}
       <BottomNav active={page} onNavigate={setPage} />
+
+      {/* ── Upgrade modal ── */}
+      {showUpgradeModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0f1629] border border-[#1e2d4a] rounded-2xl p-8 max-w-sm w-full text-center space-y-4">
+            <p className="text-3xl">🚀</p>
+            <h2 className="text-lg font-bold text-gray-100">Upgrade to Pro</h2>
+            <p className="text-sm text-gray-400">
+              The free plan supports 1 business. Upgrade to Pro for up to 3 businesses, or Agency for up to 10.
+            </p>
+            <p className="text-xs text-gray-600">Paid plans coming soon.</p>
+            <button
+              onClick={() => setShowUpgradeModal(false)}
+              className="btn-primary w-full px-6 py-3 text-sm"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

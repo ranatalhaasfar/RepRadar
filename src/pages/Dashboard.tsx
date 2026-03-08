@@ -142,7 +142,7 @@ export default function Dashboard() {
   const { user } = useAuth()
 
   // ── Zustand store ──
-  const { business, reviews, dashboardLoadedAt, dashboardBusinessId, setDashboard } = useAppStore()
+  const { activeBusiness, activeBusinessId, business, reviews, dashboardLoadedAt, dashboardBusinessId, setDashboard } = useAppStore()
 
   // ── Local UI state (not persisted — fine to reset on reload) ──
   const [loading,         setLoading]         = useState(false)
@@ -156,27 +156,18 @@ export default function Dashboard() {
   const [timeline,        setTimeline]        = useState<SentimentPoint[]>([])
   const [initializing,    setInitializing]    = useState(true)
 
-  // ── On mount: load from store → Supabase (never auto-call Anthropic) ──
+  // ── On mount / business switch: load from store → Supabase (never auto-call Anthropic) ──
 
   useEffect(() => {
     if (!user) return
     initDashboard()
-  }, [user?.id])
+  }, [user?.id, activeBusinessId])
 
   const initDashboard = async () => {
     if (!user) return
     setError('')
 
-    // Fetch business ID first
-    const { data: bizData, error: bizErr } = await supabase
-      .from('businesses')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle()
-
-    if (bizErr) { setError(bizErr.message); setInitializing(false); return }
+    const bizData = activeBusiness
     if (!bizData) { setInitializing(false); return }
 
     // 1️⃣ Zustand store hit — render instantly
@@ -245,14 +236,7 @@ export default function Dashboard() {
     setAnalysisError('')
     setFromCache(false)
     try {
-      const { data: bizData, error: bizErr } = await supabase
-        .from('businesses')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle()
-      if (bizErr) throw bizErr
+      const bizData = activeBusiness
       if (!bizData) return
 
       const { data: revData, error: revErr } = await supabase

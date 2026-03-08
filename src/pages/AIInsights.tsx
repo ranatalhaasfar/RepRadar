@@ -86,7 +86,7 @@ export default function AIInsights() {
   const { user } = useAuth()
 
   // ── Zustand store ──
-  const { insights, insightsLoadedAt, insightsBusinessId, setInsights, clearInsights } = useAppStore()
+  const { activeBusiness, insights, insightsLoadedAt, insightsBusinessId, setInsights, clearInsights } = useAppStore()
 
   // ── Local UI state ──
   const [loading,    setLoading]    = useState(false)
@@ -97,30 +97,18 @@ export default function AIInsights() {
   const [filter,     setFilter]     = useState<'All' | Impact>('All')
   const [expanded,   setExpanded]   = useState<Set<number>>(new Set())
 
-  // ── On mount: load from store → Supabase → (never auto-call Anthropic) ──
+  // ── On mount / business switch: load from store → Supabase → (never auto-call Anthropic) ──
 
   useEffect(() => {
     if (!user) return
     loadInsights()
-  }, [user?.id])
+  }, [user?.id, activeBusiness?.id])
 
   const loadInsights = async () => {
     if (!user) return
-
-    // 1️⃣ Zustand store has insights for this user's business → render instantly
-    //    (We don't know the business ID yet at this point, but we check after fetching biz)
-
     setError('')
 
-    // Always fetch business ID first (cheap query)
-    const { data: bizData, error: bizErr } = await supabase
-      .from('businesses')
-      .select('id, name, type')
-      .eq('user_id', user.id)
-      .limit(1)
-      .maybeSingle()
-
-    if (bizErr) { setError(`Business load error: ${bizErr.message}`); return }
+    const bizData = activeBusiness
     if (!bizData) { setLoading(false); return }
 
     // 1️⃣ Store hit — insights already in memory for this business
@@ -181,13 +169,7 @@ export default function AIInsights() {
     setRefreshing(true)
     setError('')
     try {
-      const { data: bizData, error: bizErr } = await supabase
-        .from('businesses')
-        .select('id, name, type')
-        .eq('user_id', user.id)
-        .limit(1)
-        .maybeSingle()
-      if (bizErr) throw new Error(`Business load error: ${bizErr.message}`)
+      const bizData = activeBusiness
       if (!bizData) return
 
       const { data: revData, error: revErr } = await supabase

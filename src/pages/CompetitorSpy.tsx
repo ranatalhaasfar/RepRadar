@@ -5,7 +5,7 @@ import {
 } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import type { Business } from '../lib/supabase'
+import { useAppStore } from '../store/appStore'
 
 // ── Outscraper limits ──────────────────────────────────────────────────────
 
@@ -76,7 +76,7 @@ function SpinnerIcon() {
 
 export default function CompetitorSpy() {
   const { user } = useAuth()
-  const [business, setBusiness]           = useState<Business | null>(null)
+  const activeBusiness = useAppStore(s => s.activeBusiness)
   const [myReviewTexts, setMyReviewTexts] = useState<string[]>([])
 
   // Inputs: name + city pairs
@@ -93,19 +93,12 @@ export default function CompetitorSpy() {
   const [error, setError]                 = useState('')
   const [hasResults, setHasResults]       = useState(false)
 
-  // ── Load existing business + cached competitors ──────────────────────────
+  // ── Load cached competitors on business change ────────────────────────────
 
   useEffect(() => {
-    if (!user) return
+    if (!user || !activeBusiness) return
     ;(async () => {
-      const { data: biz } = await supabase
-        .from('businesses')
-        .select('*')
-        .eq('user_id', user.id)
-        .limit(1)
-        .maybeSingle()
-      if (!biz) return
-      setBusiness(biz)
+      const biz = activeBusiness
 
       // Load my reviews for AI comparison
       const { data: revs } = await supabase
@@ -129,9 +122,13 @@ export default function CompetitorSpy() {
             Array(Math.max(0, 3 - comps.length)).fill({ name: '', city: '' })
           ).slice(0, 3)
         )
+      } else {
+        setCompetitors([])
+        setHasResults(false)
+        setInputs([{ name: '', city: '' }, { name: '', city: '' }, { name: '', city: '' }])
       }
     })()
-  }, [user])
+  }, [user, activeBusiness?.id])
 
   const updateInput = (i: number, field: 'name' | 'city', val: string) => {
     setInputs(prev => { const next = [...prev]; next[i] = { ...next[i], [field]: val }; return next })
@@ -154,7 +151,7 @@ export default function CompetitorSpy() {
 
       for (const entry of entries) {
         const compName = entry.name.trim()
-        const compCity = entry.city.trim() || business?.location || ''
+        const compCity = entry.city.trim() || activeBusiness?.location || ''
 
         // 1. Search Google Maps via Outscraper
         setLoadingMsg(`Searching Google Maps for "${compName}"…`)
@@ -197,11 +194,11 @@ export default function CompetitorSpy() {
       }
 
       // 3. Save competitors to DB
-      if (business) {
+      if (activeBusiness) {
         setLoadingMsg('Saving competitor data…')
-        await supabase.from('competitors').delete().eq('business_id', business.id)
+        await supabase.from('competitors').delete().eq('business_id', activeBusiness.id)
         const rows = results.map(r => ({
-          business_id:        business.id,
+          business_id:        activeBusiness.id,
           name:               r.name,
           location:           r.location,
           place_id:           r.place_id,
@@ -231,8 +228,8 @@ export default function CompetitorSpy() {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              businessName: business?.name ?? 'My Business',
-              businessType: business?.type ?? 'Business',
+              businessName: activeBusiness?.name ?? 'My Business',
+              businessType: activeBusiness?.type ?? 'Business',
               reviews: [
                 '=== MY BUSINESS REVIEWS ===',
                 ...myReviewTexts.slice(0, 20),
@@ -275,7 +272,7 @@ export default function CompetitorSpy() {
   // ── Chart data ───────────────────────────────────────────────────────────
 
   const chartData = [
-    { name: 'You', rating: business?.google_rating ?? 0, fill: '#a855f7' },
+    { name: 'You', rating: activeBusiness?.google_rating ?? 0, fill: '#a855f7' },
     ...competitors
       .filter(c => c.google_rating !== null)
       .map((c, idx) => ({
@@ -321,7 +318,7 @@ export default function CompetitorSpy() {
               <input
                 value={val.city}
                 onChange={e => updateInput(i, 'city', e.target.value)}
-                placeholder={`City (optional, defaults to ${business?.location ?? 'your city'})`}
+                placeholder={`City (optional, defaults to ${activeBusiness?.location ?? 'your city'})`}
                 className="input-dark text-sm"
                 onKeyDown={e => e.key === 'Enter' && runSpy()}
               />
@@ -426,23 +423,23 @@ export default function CompetitorSpy() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1e2d4a]">
-                  {business && (
+                  {activeBusiness && (
                     <tr className="bg-purple-500/5">
                       <td className="px-3 sm:px-6 py-3 sm:py-4">
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
-                          <span className="text-sm font-semibold text-purple-300">{business.name}</span>
+                          <span className="text-sm font-semibold text-purple-300">{activeBusiness.name}</span>
                           <span className="badge bg-purple-500/20 text-purple-400 border border-purple-500/30">You</span>
                         </div>
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 min-w-[120px]">
-                        {business.google_rating
-                          ? <StarBar rating={business.google_rating} />
+                        {activeBusiness.google_rating
+                          ? <StarBar rating={activeBusiness.google_rating} />
                           : <span className="text-xs text-gray-600">Not available</span>
                         }
                       </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-300">{business.total_reviews.toLocaleString()}</td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs text-gray-500">{business.location}</td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-300">{activeBusiness.total_reviews.toLocaleString()}</td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs text-gray-500">{activeBusiness.location}</td>
                     </tr>
                   )}
                   {competitors.map((c, i) => (
@@ -479,7 +476,7 @@ export default function CompetitorSpy() {
             const withRatings = competitors.filter(c => c.google_rating !== null)
             if (!withRatings.length) return null
             const best = [...withRatings].sort((a, b) => (b.google_rating ?? 0) - (a.google_rating ?? 0))[0]
-            const myRating = business?.google_rating ?? 0
+            const myRating = activeBusiness?.google_rating ?? 0
             const youWin = myRating > 0 && myRating >= (best.google_rating ?? 0)
             return (
               <div className={`card p-4 flex gap-3 ${youWin ? 'border-emerald-500/30' : 'border-amber-500/30'}`}>

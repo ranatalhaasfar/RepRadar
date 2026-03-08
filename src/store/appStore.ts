@@ -25,6 +25,11 @@ export type DashboardStats = {
 // ── Store shape ───────────────────────────────────────────────────────────────
 
 type AppStore = {
+  // ── Active business (global) ──
+  activeBusinessId:  string | null
+  activeBusiness:    Business | null
+  allBusinesses:     Business[]
+
   // ── Insights ──
   insights:           Insight[]
   insightsLoadedAt:   number | null   // epoch ms
@@ -37,17 +42,23 @@ type AppStore = {
   dashboardBusinessId:  string | null  // which business this data belongs to
 
   // ── Actions ──
-  setInsights:     (insights: Insight[], businessId: string) => void
-  clearInsights:   () => void
-  setDashboard:    (business: Business, reviews: Review[], businessId: string) => void
-  clearDashboard:  () => void
-  clearAll:        () => void
+  setActiveBusiness:  (business: Business) => void
+  setAllBusinesses:   (businesses: Business[]) => void
+  setInsights:        (insights: Insight[], businessId: string) => void
+  clearInsights:      () => void
+  setDashboard:       (business: Business, reviews: Review[], businessId: string) => void
+  clearDashboard:     () => void
+  clearAll:           () => void
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 export const useAppStore = create<AppStore>((set) => ({
   // ── Initial state ──
+  activeBusinessId:    null,
+  activeBusiness:      null,
+  allBusinesses:       [],
+
   insights:            [],
   insightsLoadedAt:    null,
   insightsBusinessId:  null,
@@ -58,6 +69,10 @@ export const useAppStore = create<AppStore>((set) => ({
   dashboardBusinessId: null,
 
   // ── Actions ──
+  setActiveBusiness: (business) => set({ activeBusinessId: business.id, activeBusiness: business }),
+
+  setAllBusinesses: (businesses) => set({ allBusinesses: businesses }),
+
   setInsights: (insights, businessId) => set({
     insights,
     insightsLoadedAt:   Date.now(),
@@ -85,6 +100,9 @@ export const useAppStore = create<AppStore>((set) => ({
   }),
 
   clearAll: () => set({
+    activeBusinessId:    null,
+    activeBusiness:      null,
+    allBusinesses:       [],
     insights:            [],
     insightsLoadedAt:    null,
     insightsBusinessId:  null,
