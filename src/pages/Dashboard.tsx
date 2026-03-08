@@ -105,102 +105,84 @@ function StatCard({ icon, value, label, sub, color = 'text-gray-100' }: {
 }
 
 function ReputationGauge({ score }: { score: number }) {
-  // Speedometer: viewBox 200×120, center (100,100), radius 80, strokeWidth 16
-  // Semicircle goes left→top→right (180° to 0°).
-  // Circumference = 2π×80 ≈ 502.65. Half (semicircle) ≈ 251.33.
-  // Each degree of arc = 251.33/180 ≈ 1.3963 units.
-  // Segments (left→right):
-  //   Red    180°→108° = 72°  → 100.53 units
-  //   Orange 108°→54°  = 54°  → 75.40  units
-  //   Green   54°→0°   = 54°  → 75.40  units
-  // stroke-dasharray trick: [segLen, C] draws only segLen then gaps forever.
-  // stroke-dashoffset shifts where the dash starts along the stroke path.
-  // Rotating circle -90° makes stroke start at top; we rotate -180° to start at left.
+  // viewBox 200×145 — arc center at (100, 95), radius 78, strokeWidth 14
+  // Extra height below center gives room for score text + labels.
+  // Semicircle: 180° (left) → 0° (right) through top.
+  // strokeLinecap="butt" so segments meet cleanly with no overlap/gap.
 
-  const C = 2 * Math.PI * 80          // full circumference ≈ 502.65
-  const semi = C / 2                  // semicircle length ≈ 251.33
-  const deg = semi / 180              // units per degree ≈ 1.3963
+  const cx = 100, cy = 95, r = 78
+  const C    = 2 * Math.PI * r   // ≈ 490.09
+  const semi = C / 2             // ≈ 245.04
+  const dpx  = semi / 180        // units per degree ≈ 1.3613
 
-  const redLen    = 72 * deg          // 180°→108°
-  const orangeLen = 54 * deg          // 108°→54°
-  const greenLen  = 54 * deg          // 54°→0°
+  // Arc segment lengths (degrees × dpx)
+  const redLen    = 72 * dpx   // 180°→108°  (0–40)
+  const orangeLen = 54 * dpx   // 108°→54°   (41–70)
+  const greenLen  = 54 * dpx   //  54°→0°    (71–100)
 
-  // Needle angle: score 0→100 maps to 180°→0° (left→right through top)
-  const needleAngleDeg = 180 - score * 1.8
-  const needleRad = (needleAngleDeg * Math.PI) / 180
-  const needleLen = 68
-  const nx = 100 + needleLen * Math.cos(needleRad)
-  const ny = 100 - needleLen * Math.sin(needleRad)
+  // Needle: score 0→100 maps to angle 180°→0°
+  const angleDeg = 180 - score * 1.8
+  const angleRad = (angleDeg * Math.PI) / 180
+  const nLen = 66
+  const nx = cx + nLen * Math.cos(angleRad)
+  const ny = cy - nLen * Math.sin(angleRad)
 
   const scoreColor = score <= 40 ? '#ef4444' : score <= 70 ? '#f59e0b' : '#22c55e'
 
-  // Shared circle props — rotated so stroke begins at left (180°)
-  const circleProps = {
-    cx: 100, cy: 100, r: 80,
+  // All colored arcs share these props
+  const arc = {
+    cx, cy, r,
     fill: 'none',
-    strokeWidth: 16,
-    strokeLinecap: 'round' as const,
-    transform: 'rotate(-180 100 100)',
+    strokeWidth: 14,
+    strokeLinecap: 'butt' as const,   // butt = no caps → seamless joins
+    transform: `rotate(-180 ${cx} ${cy})`,
   }
 
   return (
     <div className="flex flex-col items-center">
-      <svg viewBox="0 0 200 120" className="w-full max-w-[260px]" aria-label={`Reputation score: ${score} out of 100`}>
+      <svg viewBox="0 0 200 145" className="w-full max-w-[260px]"
+        aria-label={`Reputation score: ${score} out of 100`}>
 
-        {/* Background track — full semicircle */}
-        <circle {...circleProps}
-          stroke="#1e2030"
-          strokeDasharray={`${semi} ${C}`}
-        />
+        {/* Dark background track */}
+        <circle {...arc} stroke="#1e2d4a" strokeDasharray={`${semi} ${C}`} />
 
-        {/* Red zone: starts at left edge, length=redLen */}
-        <circle {...circleProps}
-          stroke="#ef4444"
+        {/* Red 0–40 */}
+        <circle {...arc} stroke="#ef4444"
           strokeDasharray={`${redLen} ${C}`}
-          strokeDashoffset={0}
-        />
+          strokeDashoffset={0} />
 
-        {/* Orange zone: offset by redLen so it starts after red */}
-        <circle {...circleProps}
-          stroke="#f59e0b"
+        {/* Orange 41–70 */}
+        <circle {...arc} stroke="#f59e0b"
           strokeDasharray={`${orangeLen} ${C}`}
-          strokeDashoffset={-redLen}
-        />
+          strokeDashoffset={-redLen} />
 
-        {/* Green zone: offset by red+orange */}
-        <circle {...circleProps}
-          stroke="#22c55e"
+        {/* Green 71–100 */}
+        <circle {...arc} stroke="#22c55e"
           strokeDasharray={`${greenLen} ${C}`}
-          strokeDashoffset={-(redLen + orangeLen)}
-        />
+          strokeDashoffset={-(redLen + orangeLen)} />
 
-        {/* Needle */}
-        <line
-          x1="100" y1="100"
-          x2={nx} y2={ny}
-          stroke="white" strokeWidth="2.5" strokeLinecap="round"
-        />
+        {/* Needle line */}
+        <line x1={cx} y1={cy} x2={nx} y2={ny}
+          stroke="white" strokeWidth="2.5" strokeLinecap="round" />
 
-        {/* Needle base circle */}
-        <circle cx="100" cy="100" r="6" fill="#cbd5e1" />
-        <circle cx="100" cy="100" r="3" fill="#0f172a" />
+        {/* Hub */}
+        <circle cx={cx} cy={cy} r="6" fill="#94a3b8" />
+        <circle cx={cx} cy={cy} r="3" fill="#0f172a" />
 
-        {/* Score number */}
-        <text x="100" y="85" textAnchor="middle" dominantBaseline="middle"
-          fill={scoreColor} fontSize="28" fontWeight="800" fontFamily="inherit">
+        {/* Score — below center, clear of needle */}
+        <text x={cx} y={cy + 18} textAnchor="middle"
+          fill={scoreColor} fontSize="26" fontWeight="800" fontFamily="inherit">
           {score}
         </text>
-
-        {/* /100 label */}
-        <text x="100" y="97" textAnchor="middle"
+        <text x={cx} y={cy + 30} textAnchor="middle"
           fill="#6b7280" fontSize="10" fontFamily="inherit">
           /100
         </text>
 
-        {/* Bottom scale labels */}
-        <text x="18"  y="115" textAnchor="middle" fill="#6b7280" fontSize="9" fontFamily="inherit">0</text>
-        <text x="100" y="115" textAnchor="middle" fill="#6b7280" fontSize="9" fontFamily="inherit">50</text>
-        <text x="182" y="115" textAnchor="middle" fill="#6b7280" fontSize="9" fontFamily="inherit">100</text>
+        {/* Scale labels at very bottom */}
+        <text x="20"  y="142" textAnchor="middle" fill="#6b7280" fontSize="9" fontFamily="inherit">0</text>
+        <text x={cx}  y="142" textAnchor="middle" fill="#6b7280" fontSize="9" fontFamily="inherit">50</text>
+        <text x="180" y="142" textAnchor="middle" fill="#6b7280" fontSize="9" fontFamily="inherit">100</text>
 
       </svg>
     </div>
