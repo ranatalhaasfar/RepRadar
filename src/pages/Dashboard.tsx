@@ -105,89 +105,103 @@ function StatCard({ icon, value, label, sub, color = 'text-gray-100' }: {
 }
 
 function ReputationGauge({ score }: { score: number }) {
-  // Semicircle speedometer — flat side at bottom
-  // SVG canvas: 220×130. Arc center: (110, 110), radius 90.
-  // Arc sweeps from 180° (left=0) to 0° (right=100) through the top.
-  const cx = 110, cy = 110, r = 90, strokeW = 16
+  // Speedometer: viewBox 200×120, center (100,100), radius 80, strokeWidth 16
+  // Semicircle goes left→top→right (180° to 0°).
+  // Circumference = 2π×80 ≈ 502.65. Half (semicircle) ≈ 251.33.
+  // Each degree of arc = 251.33/180 ≈ 1.3963 units.
+  // Segments (left→right):
+  //   Red    180°→108° = 72°  → 100.53 units
+  //   Orange 108°→54°  = 54°  → 75.40  units
+  //   Green   54°→0°   = 54°  → 75.40  units
+  // stroke-dasharray trick: [segLen, C] draws only segLen then gaps forever.
+  // stroke-dashoffset shifts where the dash starts along the stroke path.
+  // Rotating circle -90° makes stroke start at top; we rotate -180° to start at left.
 
-  // Convert polar angle (degrees, 0=right, CCW) to SVG x,y
-  const polar = (angleDeg: number, radius = r) => ({
-    x: cx + radius * Math.cos((angleDeg * Math.PI) / 180),
-    y: cy - radius * Math.sin((angleDeg * Math.PI) / 180),
-  })
+  const C = 2 * Math.PI * 80          // full circumference ≈ 502.65
+  const semi = C / 2                  // semicircle length ≈ 251.33
+  const deg = semi / 180              // units per degree ≈ 1.3963
 
-  // Build an SVG arc path from startAngle to endAngle (both in degrees, CCW)
-  const arcPath = (startDeg: number, endDeg: number, radius = r, strokeWidth = strokeW) => {
-    const inner = radius - strokeWidth / 2
-    const outer = radius + strokeWidth / 2
-    const s = polar(startDeg, inner)
-    const e = polar(endDeg, inner)
-    const S = polar(startDeg, outer)
-    const E = polar(endDeg, outer)
-    const large = Math.abs(endDeg - startDeg) > 180 ? 1 : 0
-    // Sweep direction: endDeg < startDeg → clockwise in SVG (sweep-flag=0 for CCW math)
-    return [
-      `M ${S.x} ${S.y}`,
-      `A ${outer} ${outer} 0 ${large} 0 ${E.x} ${E.y}`,
-      `L ${e.x} ${e.y}`,
-      `A ${inner} ${inner} 0 ${large} 1 ${s.x} ${s.y}`,
-      'Z',
-    ].join(' ')
-  }
+  const redLen    = 72 * deg          // 180°→108°
+  const orangeLen = 54 * deg          // 108°→54°
+  const greenLen  = 54 * deg          // 54°→0°
 
-  // Score 0–100 → angle 180°–0° (left to right through top)
-  const scoreAngle = 180 - score * 1.8 // 1.8 = 180/100
+  // Needle angle: score 0→100 maps to 180°→0° (left→right through top)
+  const needleAngleDeg = 180 - score * 1.8
+  const needleRad = (needleAngleDeg * Math.PI) / 180
+  const needleLen = 68
+  const nx = 100 + needleLen * Math.cos(needleRad)
+  const ny = 100 - needleLen * Math.sin(needleRad)
 
-  // Color zones: 0-40 red (180°→108°), 41-70 yellow (108°→54°), 71-100 green (54°→0°)
   const scoreColor = score <= 40 ? '#ef4444' : score <= 70 ? '#f59e0b' : '#22c55e'
 
-  // Needle: thin line from center to arc, rotated to scoreAngle
-  const needleTip = polar(scoreAngle, r - strokeW / 2 - 2)
-  const needleBase1 = polar(scoreAngle + 90, 8)
-  const needleBase2 = polar(scoreAngle - 90, 8)
+  // Shared circle props — rotated so stroke begins at left (180°)
+  const circleProps = {
+    cx: 100, cy: 100, r: 80,
+    fill: 'none',
+    strokeWidth: 16,
+    strokeLinecap: 'round' as const,
+    transform: 'rotate(-180 100 100)',
+  }
 
   return (
     <div className="flex flex-col items-center">
-      <svg viewBox="0 0 220 118" className="w-full max-w-[260px]" aria-label={`Reputation score: ${score} out of 100`}>
-        {/* Track background */}
-        <path d={arcPath(180, 0)} fill="#1e2d4a" />
+      <svg viewBox="0 0 200 120" className="w-full max-w-[260px]" aria-label={`Reputation score: ${score} out of 100`}>
 
-        {/* Color zone: red 0–40 (180°→108°) */}
-        <path d={arcPath(180, 108)} fill="#ef4444" opacity="0.85" />
-        {/* Color zone: orange/yellow 40–70 (108°→54°) */}
-        <path d={arcPath(108, 54)} fill="#f59e0b" opacity="0.85" />
-        {/* Color zone: green 70–100 (54°→0°) */}
-        <path d={arcPath(54, 0)} fill="#22c55e" opacity="0.85" />
+        {/* Background track — full semicircle */}
+        <circle {...circleProps}
+          stroke="#1e2030"
+          strokeDasharray={`${semi} ${C}`}
+        />
+
+        {/* Red zone: starts at left edge, length=redLen */}
+        <circle {...circleProps}
+          stroke="#ef4444"
+          strokeDasharray={`${redLen} ${C}`}
+          strokeDashoffset={0}
+        />
+
+        {/* Orange zone: offset by redLen so it starts after red */}
+        <circle {...circleProps}
+          stroke="#f59e0b"
+          strokeDasharray={`${orangeLen} ${C}`}
+          strokeDashoffset={-redLen}
+        />
+
+        {/* Green zone: offset by red+orange */}
+        <circle {...circleProps}
+          stroke="#22c55e"
+          strokeDasharray={`${greenLen} ${C}`}
+          strokeDashoffset={-(redLen + orangeLen)}
+        />
 
         {/* Needle */}
-        <polygon
-          points={`${needleTip.x},${needleTip.y} ${needleBase1.x},${needleBase1.y} ${needleBase2.x},${needleBase2.y}`}
-          fill="white"
-          opacity="0.9"
-          className="transition-all duration-1000"
+        <line
+          x1="100" y1="100"
+          x2={nx} y2={ny}
+          stroke="white" strokeWidth="2.5" strokeLinecap="round"
         />
-        {/* Needle hub */}
-        <circle cx={cx} cy={cy} r="7" fill="#e2e8f0" />
-        <circle cx={cx} cy={cy} r="4" fill="#1e2d4a" />
 
-        {/* Score text */}
-        <text x={cx} y={cy - 18} textAnchor="middle" fill={scoreColor}
-          fontSize="32" fontWeight="800" fontFamily="inherit">
+        {/* Needle base circle */}
+        <circle cx="100" cy="100" r="6" fill="#cbd5e1" />
+        <circle cx="100" cy="100" r="3" fill="#0f172a" />
+
+        {/* Score number */}
+        <text x="100" y="85" textAnchor="middle" dominantBaseline="middle"
+          fill={scoreColor} fontSize="28" fontWeight="800" fontFamily="inherit">
           {score}
         </text>
-        <text x={cx} y={cy - 4} textAnchor="middle" fill="#6b7280"
-          fontSize="11" fontFamily="inherit">
+
+        {/* /100 label */}
+        <text x="100" y="97" textAnchor="middle"
+          fill="#6b7280" fontSize="10" fontFamily="inherit">
           /100
         </text>
-        <text x={cx} y={cy + 10} textAnchor="middle" fill="#6b7280"
-          fontSize="10" fontFamily="inherit">
-          Reputation Score
-        </text>
 
-        {/* Scale labels */}
-        <text x="14"  y="116" textAnchor="middle" fill="#9ca3af" fontSize="10" fontFamily="inherit">0</text>
-        <text x={cx}  y="116" textAnchor="middle" fill="#9ca3af" fontSize="10" fontFamily="inherit">50</text>
-        <text x="206" y="116" textAnchor="middle" fill="#9ca3af" fontSize="10" fontFamily="inherit">100</text>
+        {/* Bottom scale labels */}
+        <text x="18"  y="115" textAnchor="middle" fill="#6b7280" fontSize="9" fontFamily="inherit">0</text>
+        <text x="100" y="115" textAnchor="middle" fill="#6b7280" fontSize="9" fontFamily="inherit">50</text>
+        <text x="182" y="115" textAnchor="middle" fill="#6b7280" fontSize="9" fontFamily="inherit">100</text>
+
       </svg>
     </div>
   )
