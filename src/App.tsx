@@ -288,6 +288,8 @@ function AuthenticatedApp() {
   const setAllBusinesses  = useAppStore(s => s.setAllBusinesses)
   const activeBusiness    = useAppStore(s => s.activeBusiness)
   const allBusinesses     = useAppStore(s => s.allBusinesses)
+  const pendingNavPage    = useAppStore(s => s.pendingNavPage)
+  const setPendingNavPage = useAppStore(s => s.setPendingNavPage)
 
   const [page, setPage]               = useState<Page>('dashboard')
   const [hasOnboarded, setHasOnboarded] = useState<boolean | null>(null)
@@ -301,6 +303,15 @@ function AuthenticatedApp() {
     if (!user) return
     loadAllBusinesses()
   }, [user])
+
+  // ── Cross-page navigation intent ─────────────────────────────────────────
+
+  useEffect(() => {
+    if (pendingNavPage && pendingNavPage in PAGE_TITLES) {
+      setPage(pendingNavPage as Page)
+      setPendingNavPage(null)
+    }
+  }, [pendingNavPage])
 
   const loadAllBusinesses = async () => {
     const { data } = await supabase

@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { useAppStore } from '../store/appStore'
 
 type Tone = 'Friendly' | 'Professional' | 'Apologetic'
 
@@ -18,6 +19,8 @@ function SpinnerIcon({ className = 'h-4 w-4' }: { className?: string }) {
 }
 
 export default function ReviewResponder() {
+  const { pendingReviewText, setPendingReviewText } = useAppStore()
+
   const [review, setReview]     = useState('')
   const [tone, setTone]         = useState<Tone>('Professional')
   const [response, setResponse] = useState('')
@@ -25,6 +28,15 @@ export default function ReviewResponder() {
   const [copied, setCopied]     = useState(false)
   const [error, setError]       = useState('')
   const responseRef             = useRef<HTMLDivElement>(null)
+
+  // Pre-fill from Dashboard "Respond" button
+  useEffect(() => {
+    if (pendingReviewText) {
+      setReview(pendingReviewText)
+      setTone('Apologetic')
+      setPendingReviewText(null)
+    }
+  }, [pendingReviewText])
 
   const generateResponse = async () => {
     if (!review.trim()) {
