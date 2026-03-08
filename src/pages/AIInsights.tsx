@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useAppStore } from '../store/appStore'
-import { lcSave, lcLoad, lcClear } from '../lib/localCache'
 import type { Insight } from '../store/appStore'
 
 // ── Styles ──────────────────────────────────────────────────────────────────
@@ -114,6 +113,15 @@ export default function AIInsights() {
     const bizId = activeBusiness.id
     setError('')
 
+    // ── Debug: dump raw localStorage state ──
+    const localKey = `repradar_insights_${bizId}`
+    const rawCached = localStorage.getItem(localKey)
+    console.log('=== AI INSIGHTS LOAD ===')
+    console.log('Business ID:', bizId)
+    console.log('localStorage key:', localKey)
+    console.log('localStorage raw value:', rawCached ? `${rawCached.slice(0, 120)}…` : 'null (nothing saved)')
+    console.log('Zustand insights count:', insights.length, '| insightsBusinessId:', insightsBusinessId)
+
     // ─── Layer 1: Zustand store (in-memory, survives tab switches but not refreshes) ───
     if (insightsBusinessId === bizId && insights.length > 0) {
       console.log('[AIInsights] ✅ Layer 1 hit — Zustand store')
@@ -122,12 +130,21 @@ export default function AIInsights() {
     }
 
     // ─── Layer 2: localStorage (survives browser refresh) ───
-    const lsData = lcLoad<Insight[]>('insights', bizId)
-    if (lsData && lsData.data.length > 0) {
-      console.log('[AIInsights] ✅ Layer 2 hit — localStorage', `(saved ${new Date(lsData.savedAt).toLocaleTimeString()})`)
-      setInsights(lsData.data, bizId)
-      setCacheSource('localStorage')
-      return
+    // Direct parse — bypass lcLoad wrapper to rule out any helper bug
+    if (rawCached) {
+      try {
+        const parsed = JSON.parse(rawCached) as { data: Insight[]; savedAt: number }
+        if (parsed?.data && parsed.data.length > 0) {
+          console.log('[AIInsights] ✅ Layer 2 hit — localStorage', parsed.data.length, 'insights, saved at', new Date(parsed.savedAt).toLocaleTimeString())
+          setInsights(parsed.data, bizId)
+          setCacheSource('localStorage')
+          return
+        } else {
+          console.log('[AIInsights] ⚠ localStorage key exists but data is empty/malformed:', parsed)
+        }
+      } catch (e) {
+        console.log('[AIInsights] ⚠ localStorage parse error:', e)
+      }
     }
 
     // ─── Layer 3: Supabase (permanent DB storage) ───
@@ -154,9 +171,10 @@ export default function AIInsights() {
           recommendation: row.recommendation,
           impact:         row.impact as Impact,
         }))
-        // Save to both Layer 1 and Layer 2
+        // Save to Layer 1 (Zustand) and Layer 2 (localStorage)
         setInsights(loaded, bizId)
-        lcSave('insights', bizId, loaded)
+        localStorage.setItem(`repradar_insights_${bizId}`, JSON.stringify({ data: loaded, savedAt: Date.now() }))
+        console.log('[AIInsights] ✅ Layer 3 hit — Supabase, saved to localStorage')
         setCacheSource('supabase')
       } else {
         // ─── All 3 layers empty ───
@@ -193,7 +211,7 @@ export default function AIInsights() {
         setNoReviews(true)
         // Clear all 3 layers
         clearInsights()
-        lcClear('insights', bizId)
+        localStorage.removeItem(`repradar_insights_${bizId}`)
         await supabase.from('insights').delete().eq('business_id', bizId)
         return
       }
@@ -231,9 +249,12 @@ export default function AIInsights() {
         else console.log('[AIInsights] ✅ Layer 3 saved — Supabase')
       }
 
-      // Save to Layer 2: localStorage
-      lcSave('insights', bizId, fresh)
-      console.log('[AIInsights] ✅ Layer 2 saved — localStorage')
+      // Save to Layer 2: localStorage — direct write AND via helper
+      const lsKey = `repradar_insights_${bizId}`
+      const lsValue = JSON.stringify({ data: fresh, savedAt: Date.now() })
+      localStorage.setItem(lsKey, lsValue)
+      console.log('[AIInsights] ✅ Layer 2 saved — localStorage key:', lsKey, '| insights count:', fresh.length)
+      console.log('[AIInsights] 📦 Verify — reading back:', localStorage.getItem(lsKey) ? 'KEY EXISTS ✅' : 'KEY MISSING ❌')
 
       // Save to Layer 1: Zustand
       setInsights(fresh, bizId)
