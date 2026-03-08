@@ -23,23 +23,59 @@ type AnalysisResult = {
   reviewSentiments: string[]
 }
 
+// keyword with optional count suffix "word×12"
+type KeywordEntry = { word: string; count: number }
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function buildTimeline(reviews: Review[]): SentimentPoint[] {
-  const bucketSize = Math.max(1, Math.ceil(reviews.length / 8))
-  const buckets: { positive: number; negative: number; total: number }[] = []
-  for (let i = 0; i < reviews.length; i++) {
-    const bi = Math.floor(i / bucketSize)
-    if (!buckets[bi]) buckets[bi] = { positive: 0, negative: 0, total: 0 }
-    buckets[bi].total++
-    if (reviews[i].sentiment === 'positive') buckets[bi].positive++
-    else if (reviews[i].sentiment === 'negative') buckets[bi].negative++
+  // Group by month using reviewed_at; fall back to bucket index if no dates
+  const monthMap = new Map<string, { positive: number; negative: number; total: number; ts: number }>()
+
+  for (const r of reviews) {
+    const raw = r.reviewed_at ?? r.created_at
+    let label: string
+    let ts: number
+    if (raw) {
+      const d = new Date(raw)
+      label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+      ts = new Date(d.getFullYear(), d.getMonth(), 1).getTime()
+    } else {
+      label = 'Unknown'
+      ts = 0
+    }
+    if (!monthMap.has(label)) monthMap.set(label, { positive: 0, negative: 0, total: 0, ts })
+    const b = monthMap.get(label)!
+    b.total++
+    if (r.sentiment === 'positive') b.positive++
+    else if (r.sentiment === 'negative') b.negative++
   }
-  return buckets.map((b, i) => ({
-    date:     `Batch ${i + 1}`,
-    positive: b.total ? Math.round((b.positive / b.total) * 100) : 0,
-    negative: b.total ? Math.round((b.negative / b.total) * 100) : 0,
-  }))
+
+  // If all reviews lack dates, fall back to bucket-based with ordinal labels
+  if (monthMap.size <= 1 && monthMap.has('Unknown')) {
+    const bucketSize = Math.max(1, Math.ceil(reviews.length / 8))
+    const buckets: { positive: number; negative: number; total: number }[] = []
+    for (let i = 0; i < reviews.length; i++) {
+      const bi = Math.floor(i / bucketSize)
+      if (!buckets[bi]) buckets[bi] = { positive: 0, negative: 0, total: 0 }
+      buckets[bi].total++
+      if (reviews[i].sentiment === 'positive') buckets[bi].positive++
+      else if (reviews[i].sentiment === 'negative') buckets[bi].negative++
+    }
+    return buckets.map((b, i) => ({
+      date:     `Group ${i + 1}`,
+      positive: b.total ? Math.round((b.positive / b.total) * 100) : 0,
+      negative: b.total ? Math.round((b.negative / b.total) * 100) : 0,
+    }))
+  }
+
+  return Array.from(monthMap.entries())
+    .sort((a, b) => a[1].ts - b[1].ts)
+    .map(([label, b]) => ({
+      date:     label,
+      positive: b.total ? Math.round((b.positive / b.total) * 100) : 0,
+      negative: b.total ? Math.round((b.negative / b.total) * 100) : 0,
+    }))
 }
 
 function computeStats(revs: Review[]) {
@@ -89,15 +125,16 @@ const VERDICT_CONFIG: Record<string, { bg: string; border: string; badge: string
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 
-function StatCard({ icon, value, label, sub, color = 'text-gray-100' }: {
-  icon: string; value: string | number; label: string; sub?: string; color?: string
+function StatCard({ icon, value, label, sub, color = 'text-gray-100', glow = '' }: {
+  icon: string; value: string | number; label: string; sub?: string; color?: string; glow?: string
 }) {
   return (
-    <div className="card p-5 flex items-start gap-4">
-      <span className="text-2xl mt-0.5">{icon}</span>
-      <div className="min-w-0">
-        <p className={`text-2xl font-bold ${color} leading-none mb-0.5`}>{value}</p>
-        <p className="text-xs font-medium text-gray-400">{label}</p>
+    <div className={`relative overflow-hidden rounded-xl border border-[#1e2d4a] bg-gradient-to-br from-[#0f1629] to-[#0a0f1e] p-5 flex items-start gap-4 transition-all hover:border-[#2d3f5e]`}>
+      {glow && <div className={`absolute top-0 right-0 w-24 h-24 ${glow} opacity-[0.08] rounded-full -translate-y-8 translate-x-8 blur-2xl pointer-events-none`} />}
+      <span className="text-2xl mt-0.5 relative z-10">{icon}</span>
+      <div className="min-w-0 relative z-10">
+        <p className={`text-3xl font-extrabold ${color} leading-none mb-1 tracking-tight`}>{value}</p>
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
         {sub && <p className="text-[10px] text-gray-600 mt-0.5">{sub}</p>}
       </div>
     </div>
@@ -210,7 +247,7 @@ function StarRating({ rating }: { rating: number | null }) {
   return (
     <span className="flex items-center gap-0.5">
       {[1,2,3,4,5].map(i => (
-        <span key={i} className={`text-xs ${i <= rating ? 'text-yellow-400' : 'text-gray-700'}`}>★</span>
+        <span key={i} className={`text-sm leading-none ${i <= rating ? 'text-yellow-400' : 'text-gray-700'}`}>★</span>
       ))}
     </span>
   )
@@ -678,12 +715,12 @@ export default function Dashboard() {
   const reviewsStale = isStale(business?.reviews_fetched_at, 7)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-100">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-100 tracking-tight">
             {business?.name ?? 'Dashboard'}
           </h1>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
@@ -786,25 +823,83 @@ export default function Dashboard() {
       {/* Stats row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <StatCard icon="📝" value={reviews.length}
-          label="Total Reviews"
+          label="Total Reviews" glow="bg-blue-400"
           sub={business?.google_rating ? `${business.google_rating.toFixed(1)}★ Google rating` : undefined}
         />
-        <StatCard icon="😊" value={`${positivePercent}%`}   label="Positive"         color="text-emerald-400" sub={`${sc.positive} reviews`} />
-        <StatCard icon="😞" value={`${negativePercent}%`}   label="Negative"         color="text-red-400"     sub={`${sc.negative} reviews`} />
-        <StatCard icon="🏆" value={reputationScore}          label="Reputation Score" color="text-purple-400"  sub="Out of 100" />
+        <StatCard icon="😊" value={`${positivePercent}%`}   label="Positive"         color="text-emerald-400" glow="bg-emerald-400" sub={`${sc.positive} reviews`} />
+        <StatCard icon="😞" value={`${negativePercent}%`}   label="Negative"         color="text-red-400"     glow="bg-red-400"     sub={`${sc.negative} reviews`} />
+        <StatCard icon="🏆" value={reputationScore}          label="Reputation Score" color="text-purple-400"  glow="bg-purple-400"  sub="Out of 100" />
       </div>
+
+      {/* Action Items */}
+      {hasAnalysis && (() => {
+        const urgentNeg = reviews.filter(r => r.sentiment === 'negative' && (r.rating === null || r.rating <= 2))
+        const unanswered = reviews.filter(r => r.sentiment === 'negative')
+        const weakCat   = categories.find(c => c.verdict === 'Critical Issue')
+        const starCat   = categories.find(c => c.verdict === 'Strength')
+        const items: { icon: string; color: string; bg: string; border: string; title: string; desc: string; action?: string; page?: string; reviewText?: string }[] = []
+
+        if (unanswered.length > 0) {
+          items.push({
+            icon: '⚠️', color: 'text-red-300', bg: 'bg-red-500/8', border: 'border-red-500/25',
+            title: `${unanswered.length} negative review${unanswered.length > 1 ? 's' : ''} need a response`,
+            desc:  'Responding to negative reviews publicly shows you care and can recover trust.',
+            action: 'Respond now', page: 'responder', reviewText: unanswered[0]?.review_text,
+          })
+        }
+        if (weakCat) {
+          items.push({
+            icon: '🔧', color: 'text-amber-300', bg: 'bg-amber-500/8', border: 'border-amber-500/25',
+            title: `"${weakCat.name}" is a critical weakness`,
+            desc:  `${weakCat.review_count} reviews mention this area negatively. Address it to boost your score.`,
+          })
+        }
+        if (starCat) {
+          items.push({
+            icon: '🌟', color: 'text-emerald-300', bg: 'bg-emerald-500/8', border: 'border-emerald-500/25',
+            title: `Customers love your "${starCat.name}"`,
+            desc:  'Highlight this strength in your marketing to attract more customers.',
+          })
+        }
+        if (urgentNeg.length === 0 && !weakCat && !starCat) return null
+        return (
+          <div className="space-y-2">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider px-1">Action Items</h3>
+            {items.map((item, i) => (
+              <div key={i} className={`flex items-start gap-3 rounded-xl border ${item.bg} ${item.border} px-4 py-3`}>
+                <span className="text-lg mt-0.5 shrink-0">{item.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold ${item.color}`}>{item.title}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{item.desc}</p>
+                </div>
+                {item.action && item.page && (
+                  <button
+                    onClick={() => {
+                      if (item.reviewText) setPendingReviewText(item.reviewText)
+                      setPendingNavPage(item.page as string)
+                    }}
+                    className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border ${item.border} ${item.color} hover:bg-white/5 transition-colors`}
+                  >
+                    {item.action} →
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )
+      })()}
 
       {/* Gauge + Chart */}
       {hasAnalysis && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="card p-6">
-            <h3 className="text-sm font-semibold text-gray-200 mb-1">Overall Score</h3>
-            <p className="text-xs text-gray-500 mb-4">Calculated from {reviews.length} reviews</p>
+          <div className="rounded-xl border border-[#1e2d4a] bg-gradient-to-br from-[#0f1629] to-[#0a0f1e] p-6">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-0.5">Overall Score</h3>
+            <p className="text-xs text-gray-600 mb-4">Calculated from {reviews.length} reviews</p>
             <ReputationGauge score={reputationScore} />
           </div>
-          <div className="card p-6">
-            <h3 className="text-sm font-semibold text-gray-200 mb-1">Sentiment Trend</h3>
-            <p className="text-xs text-gray-500 mb-4">Positive vs negative across your reviews</p>
+          <div className="rounded-xl border border-[#1e2d4a] bg-gradient-to-br from-[#0f1629] to-[#0a0f1e] p-6">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-0.5">Sentiment Trend</h3>
+            <p className="text-xs text-gray-600 mb-4">Positive vs negative across your reviews</p>
             {timeline.length > 1 ? (
               <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={timeline} margin={{ top: 5, right: 10, bottom: 5, left: -20 }}>
@@ -835,27 +930,49 @@ export default function Dashboard() {
       )}
 
       {/* Keywords */}
-      {keywords.length > 0 && (
-        <div className="card p-6">
-          <h3 className="text-sm font-semibold text-gray-200 mb-3">Most Mentioned Keywords</h3>
-          <div className="flex flex-wrap gap-2">
-            {keywords.map(kw => (
-              <span key={kw} className="badge bg-purple-500/15 text-purple-300 border border-purple-500/20 text-xs px-3 py-1">
-                {kw}
-              </span>
-            ))}
+      {keywords.length > 0 && (() => {
+        // Parse "word×12" format or just plain words
+        const parsed: KeywordEntry[] = keywords.map((kw, i) => {
+          const m = kw.match(/^(.+?)[\s×x*](\d+)$/)
+          return m ? { word: m[1].trim(), count: parseInt(m[2]) } : { word: kw, count: keywords.length - i }
+        })
+        const maxCount = Math.max(...parsed.map(k => k.count), 1)
+        return (
+          <div className="rounded-xl border border-[#1e2d4a] bg-gradient-to-br from-[#0f1629] to-[#0a0f1e] p-6">
+            <h3 className="text-sm font-bold text-gray-100 mb-4 uppercase tracking-wider">Most Mentioned Keywords</h3>
+            <div className="flex flex-wrap gap-2 items-end">
+              {parsed.map((kw, i) => {
+                const ratio = kw.count / maxCount
+                const fontSize = ratio > 0.75 ? 'text-base' : ratio > 0.5 ? 'text-sm' : ratio > 0.25 ? 'text-xs' : 'text-[11px]'
+                const padding  = ratio > 0.75 ? 'px-4 py-2' : ratio > 0.5 ? 'px-3 py-1.5' : 'px-2.5 py-1'
+                // Color: first third = green (positive keywords), last third = red, middle = purple
+                const colorClass = i < Math.floor(parsed.length / 3)
+                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25 hover:bg-emerald-500/25'
+                  : i >= Math.ceil(parsed.length * 2 / 3)
+                  ? 'bg-red-500/15 text-red-300 border-red-500/25 hover:bg-red-500/25'
+                  : 'bg-purple-500/15 text-purple-300 border-purple-500/25 hover:bg-purple-500/25'
+                return (
+                  <span key={kw.word}
+                    className={`inline-flex items-center gap-1 rounded-full border font-medium transition-colors cursor-default ${fontSize} ${padding} ${colorClass}`}
+                  >
+                    {kw.word}
+                    <span className="opacity-60 text-[9px] font-normal">×{kw.count}</span>
+                  </span>
+                )
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ── Category Summary ─────────────────────────────────── */}
       {reviews.length > 0 && (
-        <div className="card overflow-hidden">
+        <div className="rounded-xl border border-[#1e2d4a] bg-gradient-to-br from-[#0f1629] to-[#0a0f1e] overflow-hidden">
           <div className="px-6 py-4 border-b border-[#1e2d4a] flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold text-gray-200">Review Categories</h3>
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Review Categories</h3>
               {categories.length > 0 && (
-                <p className="text-[11px] text-gray-600 mt-0.5">AI-detected themes from your reviews · click to filter</p>
+                <p className="text-[11px] text-gray-600 mt-0.5">AI-detected themes · click to filter</p>
               )}
             </div>
             <button
@@ -953,10 +1070,10 @@ export default function Dashboard() {
 
       {/* ── Reviews List ────────────────────────────────────── */}
       {reviews.length > 0 && (
-        <div className="card overflow-hidden">
+        <div className="rounded-xl border border-[#1e2d4a] bg-gradient-to-br from-[#0f1629] to-[#0a0f1e] overflow-hidden">
           <div className="px-6 py-4 border-b border-[#1e2d4a] flex items-center justify-between gap-3 flex-wrap">
             <div>
-              <h3 className="text-sm font-semibold text-gray-200">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                 Reviews
                 {activeCategory && (
                   <span className="ml-2 text-[11px] text-purple-400 font-normal">· {activeCategory}</span>
@@ -1012,35 +1129,47 @@ export default function Dashboard() {
             <div className="divide-y divide-[#1e2d4a]">
               {filteredReviews.map(r => {
                 const isExpanded = expandedReviews.has(r.id)
-                const isLong = r.review_text.length > 200
+                const isLong = r.review_text.length > 220
                 const displayText = isLong && !isExpanded
-                  ? r.review_text.slice(0, 200) + '…'
+                  ? r.review_text.slice(0, 220) + '…'
                   : r.review_text
                 const dateStr = relativeDate(r.reviewed_at ?? r.created_at)
+                const sentBorder =
+                  r.sentiment === 'positive' ? 'border-l-2 border-l-emerald-500' :
+                  r.sentiment === 'negative' ? 'border-l-2 border-l-red-500' :
+                  r.sentiment === 'neutral'  ? 'border-l-2 border-l-gray-600' :
+                  ''
+                const avatarGrad =
+                  r.sentiment === 'positive' ? 'from-emerald-600 to-teal-700' :
+                  r.sentiment === 'negative' ? 'from-red-600 to-pink-700' :
+                  'from-purple-600 to-blue-600'
+                const needsResponse = r.sentiment === 'negative'
 
                 return (
-                  <div key={r.id} className="px-4 sm:px-6 py-3 sm:py-4 flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                  <div key={r.id} className={`px-4 sm:px-6 py-4 flex items-start gap-3 hover:bg-white/[0.02] transition-colors ${sentBorder}`}>
+                    <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${avatarGrad} flex items-center justify-center text-white text-xs font-bold flex-shrink-0 shadow-md`}>
                       {r.reviewer_name[0]?.toUpperCase() ?? '?'}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span className="text-sm font-medium text-gray-200">{r.reviewer_name}</span>
-                        <StarRating rating={r.rating} />
-                        {r.sentiment && (
-                          <span className={`badge text-[10px] ${
-                            r.sentiment === 'positive' ? 'bg-emerald-500/15 text-emerald-400' :
-                            r.sentiment === 'negative' ? 'bg-red-500/15 text-red-400' :
-                            'bg-gray-500/15 text-gray-400'
-                          }`}>
-                            {r.sentiment}
-                          </span>
-                        )}
+                      <div className="flex items-start justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-semibold text-gray-100">{r.reviewer_name}</span>
+                          <StarRating rating={r.rating} />
+                          {r.sentiment && (
+                            <span className={`inline-block text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${
+                              r.sentiment === 'positive' ? 'bg-emerald-500/15 text-emerald-400' :
+                              r.sentiment === 'negative' ? 'bg-red-500/15 text-red-400' :
+                              'bg-gray-500/15 text-gray-400'
+                            }`}>
+                              {r.sentiment}
+                            </span>
+                          )}
+                        </div>
                         {dateStr && (
-                          <span className="text-[10px] text-gray-600">{dateStr}</span>
+                          <span className="text-[10px] text-gray-600 shrink-0">{dateStr}</span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-400 leading-relaxed">
+                      <p className="text-xs text-gray-400 leading-relaxed mt-1.5">
                         {displayText}
                         {isLong && (
                           <button
@@ -1055,15 +1184,15 @@ export default function Dashboard() {
                           </button>
                         )}
                       </p>
-                      {r.rating !== null && r.rating <= 3 && (
+                      {needsResponse && (
                         <button
                           onClick={() => {
                             setPendingReviewText(r.review_text)
                             setPendingNavPage('responder')
                           }}
-                          className="mt-1.5 text-[10px] text-purple-400 hover:text-purple-300 border border-purple-500/25 hover:border-purple-500/50 px-2 py-0.5 rounded-md transition-all"
+                          className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded-lg transition-colors shadow-sm"
                         >
-                          ✍ Respond
+                          ✍ Write Response
                         </button>
                       )}
                     </div>
