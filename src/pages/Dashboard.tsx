@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
@@ -288,6 +288,10 @@ export default function Dashboard() {
   const [filterSentiment, setFilterSentiment] = useState<'all' | 'positive' | 'negative' | 'neutral'>('all')
   const [filterSort,      setFilterSort]      = useState<'newest' | 'lowest' | 'highest'>('newest')
   const [expandedReviews, setExpandedReviews] = useState<Set<string>>(new Set())
+
+  // ── Reviews scroll container (for fade-out overlay) ──
+  const reviewsScrollRef = useRef<HTMLDivElement>(null)
+  const [reviewsAtBottom, setReviewsAtBottom] = useState(false)
 
   // ── On mount / business switch: load from store → Supabase (never auto-call Anthropic) ──
 
@@ -1071,48 +1075,48 @@ export default function Dashboard() {
       {/* ── Reviews List ────────────────────────────────────── */}
       {reviews.length > 0 && (
         <div className="rounded-xl border border-[#1e2d4a] bg-gradient-to-br from-[#0f1629] to-[#0a0f1e] overflow-hidden">
-          <div className="px-6 py-4 border-b border-[#1e2d4a] flex items-center justify-between gap-3 flex-wrap">
+
+          {/* Header: title + review count */}
+          <div className="px-6 pt-4 pb-3 border-b border-[#1e2d4a] flex items-center justify-between gap-3 flex-wrap">
             <div>
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                 Reviews
                 {activeCategory && (
-                  <span className="ml-2 text-[11px] text-purple-400 font-normal">· {activeCategory}</span>
+                  <span className="ml-2 text-[11px] text-purple-400 font-normal normal-case tracking-normal">· {activeCategory}</span>
                 )}
               </h3>
-              <p className="text-[11px] text-gray-600 mt-0.5">{filteredReviews.length} of {reviews.length} shown</p>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                Showing {filteredReviews.length} review{filteredReviews.length !== 1 ? 's' : ''}
+                {filteredReviews.length !== reviews.length && ` (filtered from ${reviews.length})`}
+              </p>
             </div>
 
-            {/* Filters */}
+            {/* Filters — always visible in the header */}
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Time filter */}
               <select
                 value={filterTime}
-                onChange={e => setFilterTime(e.target.value as typeof filterTime)}
-                className="text-xs bg-[#0f1629] border border-[#1e2d4a] text-gray-300 rounded-lg px-2 py-1.5 min-h-[34px] focus:outline-none focus:border-purple-500/50"
+                onChange={e => { setFilterTime(e.target.value as typeof filterTime); setReviewsAtBottom(false) }}
+                className="text-xs bg-[#080d1a] border border-[#1e2d4a] text-gray-300 rounded-lg px-2 py-1.5 min-h-[34px] focus:outline-none focus:border-purple-500/50"
               >
                 <option value="all">All time</option>
                 <option value="week">Past week</option>
                 <option value="month">Past month</option>
                 <option value="older">Older</option>
               </select>
-
-              {/* Sentiment filter */}
               <select
                 value={filterSentiment}
-                onChange={e => setFilterSentiment(e.target.value as typeof filterSentiment)}
-                className="text-xs bg-[#0f1629] border border-[#1e2d4a] text-gray-300 rounded-lg px-2 py-1.5 min-h-[34px] focus:outline-none focus:border-purple-500/50"
+                onChange={e => { setFilterSentiment(e.target.value as typeof filterSentiment); setReviewsAtBottom(false) }}
+                className="text-xs bg-[#080d1a] border border-[#1e2d4a] text-gray-300 rounded-lg px-2 py-1.5 min-h-[34px] focus:outline-none focus:border-purple-500/50"
               >
                 <option value="all">All sentiment</option>
                 <option value="positive">Positive</option>
                 <option value="negative">Negative</option>
                 <option value="neutral">Neutral</option>
               </select>
-
-              {/* Sort */}
               <select
                 value={filterSort}
-                onChange={e => setFilterSort(e.target.value as typeof filterSort)}
-                className="text-xs bg-[#0f1629] border border-[#1e2d4a] text-gray-300 rounded-lg px-2 py-1.5 min-h-[34px] focus:outline-none focus:border-purple-500/50"
+                onChange={e => { setFilterSort(e.target.value as typeof filterSort); setReviewsAtBottom(false) }}
+                className="text-xs bg-[#080d1a] border border-[#1e2d4a] text-gray-300 rounded-lg px-2 py-1.5 min-h-[34px] focus:outline-none focus:border-purple-500/50"
               >
                 <option value="newest">Newest first</option>
                 <option value="highest">Highest rating</option>
@@ -1126,79 +1130,100 @@ export default function Dashboard() {
               <p className="text-xs text-gray-500">No reviews match the current filters.</p>
             </div>
           ) : (
-            <div className="divide-y divide-[#1e2d4a]">
-              {filteredReviews.map(r => {
-                const isExpanded = expandedReviews.has(r.id)
-                const isLong = r.review_text.length > 220
-                const displayText = isLong && !isExpanded
-                  ? r.review_text.slice(0, 220) + '…'
-                  : r.review_text
-                const dateStr = relativeDate(r.reviewed_at ?? r.created_at)
-                const sentBorder =
-                  r.sentiment === 'positive' ? 'border-l-2 border-l-emerald-500' :
-                  r.sentiment === 'negative' ? 'border-l-2 border-l-red-500' :
-                  r.sentiment === 'neutral'  ? 'border-l-2 border-l-gray-600' :
-                  ''
-                const avatarGrad =
-                  r.sentiment === 'positive' ? 'from-emerald-600 to-teal-700' :
-                  r.sentiment === 'negative' ? 'from-red-600 to-pink-700' :
-                  'from-purple-600 to-blue-600'
-                const needsResponse = r.sentiment === 'negative'
+            /* Scroll container with fade-out */
+            <div className="relative">
+              <div
+                ref={reviewsScrollRef}
+                onScroll={() => {
+                  const el = reviewsScrollRef.current
+                  if (!el) return
+                  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+                  setReviewsAtBottom(atBottom)
+                }}
+                style={{ height: '600px', overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: '#7c3aed #1e2030' }}
+                className="reviews-scroll divide-y divide-[#1e2d4a]"
+              >
+                {filteredReviews.map(r => {
+                  const isExpanded = expandedReviews.has(r.id)
+                  const isLong = r.review_text.length > 220
+                  const displayText = isLong && !isExpanded
+                    ? r.review_text.slice(0, 220) + '…'
+                    : r.review_text
+                  const dateStr = relativeDate(r.reviewed_at ?? r.created_at)
+                  const sentBorder =
+                    r.sentiment === 'positive' ? 'border-l-2 border-l-emerald-500' :
+                    r.sentiment === 'negative' ? 'border-l-2 border-l-red-500' :
+                    r.sentiment === 'neutral'  ? 'border-l-2 border-l-gray-600' :
+                    ''
+                  const avatarGrad =
+                    r.sentiment === 'positive' ? 'from-emerald-600 to-teal-700' :
+                    r.sentiment === 'negative' ? 'from-red-600 to-pink-700' :
+                    'from-purple-600 to-blue-600'
+                  const needsResponse = r.sentiment === 'negative'
 
-                return (
-                  <div key={r.id} className={`px-4 sm:px-6 py-4 flex items-start gap-3 hover:bg-white/[0.02] transition-colors ${sentBorder}`}>
-                    <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${avatarGrad} flex items-center justify-center text-white text-xs font-bold flex-shrink-0 shadow-md`}>
-                      {r.reviewer_name[0]?.toUpperCase() ?? '?'}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2 flex-wrap">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-semibold text-gray-100">{r.reviewer_name}</span>
-                          <StarRating rating={r.rating} />
-                          {r.sentiment && (
-                            <span className={`inline-block text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${
-                              r.sentiment === 'positive' ? 'bg-emerald-500/15 text-emerald-400' :
-                              r.sentiment === 'negative' ? 'bg-red-500/15 text-red-400' :
-                              'bg-gray-500/15 text-gray-400'
-                            }`}>
-                              {r.sentiment}
-                            </span>
+                  return (
+                    <div key={r.id} className={`px-4 sm:px-6 py-4 flex items-start gap-3 hover:bg-white/[0.02] transition-colors ${sentBorder}`}>
+                      <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${avatarGrad} flex items-center justify-center text-white text-xs font-bold flex-shrink-0 shadow-md`}>
+                        {r.reviewer_name[0]?.toUpperCase() ?? '?'}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold text-gray-100">{r.reviewer_name}</span>
+                            <StarRating rating={r.rating} />
+                            {r.sentiment && (
+                              <span className={`inline-block text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${
+                                r.sentiment === 'positive' ? 'bg-emerald-500/15 text-emerald-400' :
+                                r.sentiment === 'negative' ? 'bg-red-500/15 text-red-400' :
+                                'bg-gray-500/15 text-gray-400'
+                              }`}>
+                                {r.sentiment}
+                              </span>
+                            )}
+                          </div>
+                          {dateStr && (
+                            <span className="text-[10px] text-gray-600 shrink-0">{dateStr}</span>
                           )}
                         </div>
-                        {dateStr && (
-                          <span className="text-[10px] text-gray-600 shrink-0">{dateStr}</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-gray-400 leading-relaxed mt-1.5">
-                        {displayText}
-                        {isLong && (
+                        <p className="text-xs text-gray-400 leading-relaxed mt-1.5">
+                          {displayText}
+                          {isLong && (
+                            <button
+                              onClick={() => setExpandedReviews(prev => {
+                                const next = new Set(prev)
+                                isExpanded ? next.delete(r.id) : next.add(r.id)
+                                return next
+                              })}
+                              className="ml-1 text-purple-400 hover:text-purple-300 underline"
+                            >
+                              {isExpanded ? 'less' : 'more'}
+                            </button>
+                          )}
+                        </p>
+                        {needsResponse && (
                           <button
-                            onClick={() => setExpandedReviews(prev => {
-                              const next = new Set(prev)
-                              isExpanded ? next.delete(r.id) : next.add(r.id)
-                              return next
-                            })}
-                            className="ml-1 text-purple-400 hover:text-purple-300 underline"
+                            onClick={() => {
+                              setPendingReviewText(r.review_text)
+                              setPendingNavPage('responder')
+                            }}
+                            className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded-lg transition-colors shadow-sm"
                           >
-                            {isExpanded ? 'less' : 'more'}
+                            ✍ Write Response
                           </button>
                         )}
-                      </p>
-                      {needsResponse && (
-                        <button
-                          onClick={() => {
-                            setPendingReviewText(r.review_text)
-                            setPendingNavPage('responder')
-                          }}
-                          className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded-lg transition-colors shadow-sm"
-                        >
-                          ✍ Write Response
-                        </button>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
+
+              {/* Bottom fade-out overlay — disappears when scrolled to bottom */}
+              {!reviewsAtBottom && filteredReviews.length > 4 && (
+                <div
+                  className="absolute bottom-0 left-0 right-0 h-20 pointer-events-none"
+                  style={{ background: 'linear-gradient(to bottom, transparent, #0a0f1e)' }}
+                />
+              )}
             </div>
           )}
         </div>

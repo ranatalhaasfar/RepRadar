@@ -36,6 +36,22 @@
   }
 }
 
+/* Reviews scroll container — purple scrollbar */
+.reviews-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.reviews-scroll::-webkit-scrollbar-track {
+  background: #1e2030;
+  border-radius: 3px;
+}
+.reviews-scroll::-webkit-scrollbar-thumb {
+  background: #7c3aed;
+  border-radius: 3px;
+}
+.reviews-scroll::-webkit-scrollbar-thumb:hover {
+  background: #9d5cff;
+}
+
 @layer utilities {
   .card {
     @apply bg-[#0f1629] border border-[#1e2d4a] rounded-xl;
