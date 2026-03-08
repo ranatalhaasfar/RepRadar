@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
-import { AppDataProvider } from './context/AppDataContext'
+import { useAppStore } from './store/appStore'
 import { supabase } from './lib/supabase'
 import Login from './pages/auth/Login'
 import Signup from './pages/auth/Signup'
@@ -207,6 +207,7 @@ function BottomNav({ active, onNavigate }: { active: Page; onNavigate: (p: Page)
 
 function AuthenticatedApp() {
   const { user, signOut } = useAuth()
+  const clearAll = useAppStore(s => s.clearAll)
   const [page, setPage]               = useState<Page>('dashboard')
   const [hasOnboarded, setHasOnboarded] = useState<boolean | null>(null)
   const [businessName, setBusinessName] = useState('')
@@ -225,6 +226,11 @@ function AuthenticatedApp() {
         if (data) setBusinessName(data.name)
       })
   }, [user])
+
+  const handleSignOut = () => {
+    clearAll()
+    signOut()
+  }
 
   const handleOnboardingComplete = async () => {
     const { data } = await supabase
@@ -262,7 +268,7 @@ function AuthenticatedApp() {
           onNavigate={setPage}
           businessName={businessName}
           userEmail={user?.email ?? ''}
-          onSignOut={signOut}
+          onSignOut={handleSignOut}
         />
       </div>
 
@@ -281,7 +287,7 @@ function AuthenticatedApp() {
               onNavigate={setPage}
               businessName={businessName}
               userEmail={user?.email ?? ''}
-              onSignOut={signOut}
+              onSignOut={handleSignOut}
               onClose={() => setSidebarOpen(false)}
             />
           </div>
@@ -344,9 +350,7 @@ function Root() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppDataProvider>
-        <Root />
-      </AppDataProvider>
+      <Root />
     </AuthProvider>
   )
 }

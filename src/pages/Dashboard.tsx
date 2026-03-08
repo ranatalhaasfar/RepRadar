@@ -1,11 +1,72 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
 } from 'recharts'
+import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import { useAppData, computeStats, isStale } from '../context/AppDataContext'
-import type { Review } from '../lib/supabase'
+import { useAppStore } from '../store/appStore'
+import type { Business, Review } from '../lib/supabase'
+import type { SentimentPoint } from '../store/appStore'
+
+// ── Outscraper limits ──────────────────────────────────────────────────────
+
+const MAX_REFRESH_FETCH = 50
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
+type AnalysisResult = {
+  sentimentCounts: { positive: number; negative: number; neutral: number }
+  reputationScore: number
+  topKeywords:     string[]
+  reviewSentiments: string[]
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function buildTimeline(reviews: Review[]): SentimentPoint[] {
+  const bucketSize = Math.max(1, Math.ceil(reviews.length / 8))
+  const buckets: { positive: number; negative: number; total: number }[] = []
+  for (let i = 0; i < reviews.length; i++) {
+    const bi = Math.floor(i / bucketSize)
+    if (!buckets[bi]) buckets[bi] = { positive: 0, negative: 0, total: 0 }
+    buckets[bi].total++
+    if (reviews[i].sentiment === 'positive') buckets[bi].positive++
+    else if (reviews[i].sentiment === 'negative') buckets[bi].negative++
+  }
+  return buckets.map((b, i) => ({
+    date:     `Batch ${i + 1}`,
+    positive: b.total ? Math.round((b.positive / b.total) * 100) : 0,
+    negative: b.total ? Math.round((b.negative / b.total) * 100) : 0,
+  }))
+}
+
+function computeStats(revs: Review[]) {
+  const counts = { positive: 0, negative: 0, neutral: 0 }
+  for (const r of revs) {
+    if (r.sentiment === 'positive') counts.positive++
+    else if (r.sentiment === 'negative') counts.negative++
+    else if (r.sentiment === 'neutral') counts.neutral++
+  }
+  const total = counts.positive + counts.negative + counts.neutral
+  const score = total === 0
+    ? 0
+    : Math.round(((counts.positive + counts.neutral * 0.5) / total) * 100)
+  return { counts, score }
+}
+
+function formatTimestamp(ts: string | null | undefined): string {
+  if (!ts) return ''
+  return new Date(ts).toLocaleString('en-US', {
+    month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit',
+  })
+}
+
+function isStale(ts: string | null | undefined, days = 7): boolean {
+  if (!ts) return true
+  return Date.now() - new Date(ts).getTime() > days * 24 * 60 * 60 * 1000
+}
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 
@@ -30,7 +91,6 @@ function ReputationGauge({ score }: { score: number }) {
   const arc = circumference * 0.75
   const offset = arc - (arc * score) / 100
   const color = score >= 75 ? '#a855f7' : score >= 50 ? '#f59e0b' : '#ef4444'
-
   return (
     <div className="flex flex-col items-center justify-center h-full">
       <svg width="140" height="140" viewBox="0 0 160 160" className="-rotate-[135deg] w-32 h-32 sm:w-40 sm:h-40">
@@ -65,15 +125,6 @@ function CustomTooltip({ active, payload, label }: {
   )
 }
 
-function formatTimestamp(ts: string | null | undefined): string {
-  if (!ts) return ''
-  const d = new Date(ts)
-  return d.toLocaleString('en-US', {
-    month: 'short', day: 'numeric',
-    hour: 'numeric', minute: '2-digit',
-  })
-}
-
 function StarRating({ rating }: { rating: number | null }) {
   if (rating === null) return null
   return (
@@ -89,19 +140,264 @@ function StarRating({ rating }: { rating: number | null }) {
 
 export default function Dashboard() {
   const { user } = useAuth()
-  const {
-    business, reviews, keywords, timeline,
-    dashLoading, analysisLoading, analysisError, dashError,
-    fetchingReviews, fetchError, dashFromCache,
-    loadDashboard, fetchNewReviews, runAnalysis, setFetchError,
-  } = useAppData()
 
-  // Load once when user is available — context guard prevents re-fetching on auth token refresh
+  // ── Zustand store ──
+  const { business, reviews, dashboardLoadedAt, dashboardBusinessId, setDashboard } = useAppStore()
+
+  // ── Local UI state (not persisted — fine to reset on reload) ──
+  const [loading,         setLoading]         = useState(false)
+  const [analysisLoading, setAnalysisLoading] = useState(false)
+  const [analysisError,   setAnalysisError]   = useState('')
+  const [error,           setError]           = useState('')
+  const [fetchingReviews, setFetchingReviews] = useState(false)
+  const [fetchError,      setFetchError]      = useState('')
+  const [fromCache,       setFromCache]       = useState(false)
+  const [keywords,        setKeywords]        = useState<string[]>([])
+  const [timeline,        setTimeline]        = useState<SentimentPoint[]>([])
+  const [initializing,    setInitializing]    = useState(true)
+
+  // ── On mount: load from store → Supabase (never auto-call Anthropic) ──
+
   useEffect(() => {
-    if (user) loadDashboard()
-  }, [user?.id])  // key on user.id (stable string), not user object
+    if (!user) return
+    initDashboard()
+  }, [user?.id])
 
-  if (dashLoading) {
+  const initDashboard = async () => {
+    if (!user) return
+    setError('')
+
+    // Fetch business ID first
+    const { data: bizData, error: bizErr } = await supabase
+      .from('businesses')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+
+    if (bizErr) { setError(bizErr.message); setInitializing(false); return }
+    if (!bizData) { setInitializing(false); return }
+
+    // 1️⃣ Zustand store hit — render instantly
+    if (dashboardBusinessId === bizData.id && dashboardLoadedAt !== null && reviews.length > 0) {
+      console.log('[Dashboard] ✅ Store hit — rendering from Zustand, zero DB calls')
+      // Rebuild derived state from store data
+      setKeywords(Array.isArray(bizData.keywords) ? bizData.keywords : [])
+      setTimeline(buildTimeline(reviews))
+      setFromCache(true)
+      setInitializing(false)
+      return
+    }
+
+    // 2️⃣ Store miss — load from Supabase
+    setLoading(true)
+    try {
+      const { data: revData, error: revErr } = await supabase
+        .from('reviews')
+        .select('*')
+        .eq('business_id', bizData.id)
+        .order('created_at', { ascending: true })
+      if (revErr) throw revErr
+
+      const revs: Review[] = revData ?? []
+
+      // Save to Zustand store
+      setDashboard(bizData as Business, revs, bizData.id)
+
+      if (revs.length === 0) {
+        setInitializing(false)
+        setLoading(false)
+        return
+      }
+
+      const unanalyzedRevs = revs.filter(r => r.sentiment === null)
+      const hasKeywords = Array.isArray(bizData.keywords) && bizData.keywords.length > 0
+
+      if (unanalyzedRevs.length === 0) {
+        // All analyzed — load from cache
+        console.log('[Dashboard] ✅ All reviews analyzed — loading from cache, NO Anthropic call')
+        setKeywords(hasKeywords ? bizData.keywords! : [])
+        setTimeline(buildTimeline(revs))
+        setFromCache(true)
+      } else {
+        // New unanalyzed reviews — run analysis
+        console.log(`[Dashboard] 🌐 ${unanalyzedRevs.length} new unanalyzed reviews — calling Anthropic`)
+        setKeywords(hasKeywords ? bizData.keywords! : [])
+        setTimeline(buildTimeline(revs))
+        await runAnalysis(unanalyzedRevs, bizData.id, revs)
+      }
+    } catch (e: unknown) {
+      console.error('[Dashboard] initDashboard error:', e)
+      setError(e instanceof Error ? e.message : 'Failed to load data')
+    } finally {
+      setLoading(false)
+      setInitializing(false)
+    }
+  }
+
+  // ── Manual full reload (Refresh button) ─────────────────────────────────
+
+  const reloadDashboard = async (forceReanalyze = false) => {
+    if (!user) return
+    setLoading(true)
+    setError('')
+    setAnalysisError('')
+    setFromCache(false)
+    try {
+      const { data: bizData, error: bizErr } = await supabase
+        .from('businesses')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      if (bizErr) throw bizErr
+      if (!bizData) return
+
+      const { data: revData, error: revErr } = await supabase
+        .from('reviews')
+        .select('*')
+        .eq('business_id', bizData.id)
+        .order('created_at', { ascending: true })
+      if (revErr) throw revErr
+
+      const revs: Review[] = revData ?? []
+      setDashboard(bizData as Business, revs, bizData.id)
+
+      if (revs.length === 0) return
+
+      const unanalyzedRevs = revs.filter(r => r.sentiment === null)
+      const hasKeywords = Array.isArray(bizData.keywords) && bizData.keywords.length > 0
+
+      if (!forceReanalyze && unanalyzedRevs.length === 0) {
+        console.log('[Dashboard] ✅ Refreshed from cache — NO Anthropic call')
+        setKeywords(hasKeywords ? bizData.keywords! : [])
+        setTimeline(buildTimeline(revs))
+        setFromCache(true)
+      } else if (forceReanalyze) {
+        console.log('[Dashboard] 🌐 Force re-analyze — calling Anthropic')
+        setKeywords(hasKeywords ? bizData.keywords! : [])
+        setTimeline(buildTimeline(revs))
+        await runAnalysis(revs, bizData.id, revs)
+      } else {
+        console.log(`[Dashboard] 🌐 ${unanalyzedRevs.length} unanalyzed — calling Anthropic`)
+        setKeywords(hasKeywords ? bizData.keywords! : [])
+        setTimeline(buildTimeline(revs))
+        await runAnalysis(unanalyzedRevs, bizData.id, revs)
+      }
+    } catch (e: unknown) {
+      console.error('[Dashboard] reloadDashboard error:', e)
+      setError(e instanceof Error ? e.message : 'Failed to load data')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const runAnalysis = async (revsToAnalyze: Review[], businessId: string, allRevs: Review[]) => {
+    setAnalysisLoading(true)
+    setAnalysisError('')
+    try {
+      const res = await fetch('/api/analyze-reviews', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ reviews: revsToAnalyze.map(r => r.review_text) }),
+      })
+      const payload = await res.json()
+      if (!res.ok) throw new Error(payload.error ?? `API error ${res.status}`)
+
+      const data: AnalysisResult = payload
+
+      const sentimentMap = new Map<string, 'positive' | 'negative' | 'neutral'>()
+      revsToAnalyze.forEach((r, i) => {
+        sentimentMap.set(r.id, (data.reviewSentiments[i] ?? 'neutral') as 'positive' | 'negative' | 'neutral')
+      })
+
+      for (const r of revsToAnalyze) {
+        await supabase.from('reviews').update({ sentiment: sentimentMap.get(r.id) }).eq('id', r.id)
+      }
+
+      const mergedRevs: Review[] = allRevs.map(r =>
+        sentimentMap.has(r.id) ? { ...r, sentiment: sentimentMap.get(r.id)! } : r
+      )
+
+      const { score: newScore } = computeStats(mergedRevs)
+      const now = new Date().toISOString()
+      await supabase.from('businesses').update({
+        total_reviews:    mergedRevs.length,
+        reputation_score: data.reputationScore ?? newScore,
+        keywords:         data.topKeywords ?? [],
+        analyzed_at:      now,
+      }).eq('id', businessId)
+
+      setTimeline(buildTimeline(mergedRevs))
+      setKeywords(data.topKeywords ?? [])
+
+      // Refresh business row and update store
+      const { data: refreshed } = await supabase.from('businesses').select('*').eq('id', businessId).single()
+      if (refreshed) setDashboard(refreshed as Business, mergedRevs, businessId)
+
+    } catch (e: unknown) {
+      console.error('[Dashboard] runAnalysis error:', e)
+      setAnalysisError(e instanceof Error ? e.message : 'Analysis failed')
+    } finally {
+      setAnalysisLoading(false)
+    }
+  }
+
+  const fetchNewReviews = async () => {
+    if (!business?.place_id || !user) return
+
+    if (!isStale(business.reviews_fetched_at, 7)) {
+      setFetchError('Reviews were fetched less than 7 days ago. Please wait before refreshing again.')
+      return
+    }
+
+    setFetchingReviews(true)
+    setFetchError('')
+    try {
+      const res = await fetch('/api/outscraper-reviews', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ place_id: business.place_id, limit: MAX_REFRESH_FETCH, sort: 'newest' }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error ?? 'Failed to fetch reviews')
+      }
+      const { reviews: fetched } = await res.json()
+
+      if (fetched.length > 0) {
+        await supabase.from('reviews').delete().eq('business_id', business.id)
+        const rows = fetched.map((r: {
+          reviewer_name: string; review_text: string
+          rating: number | null; reviewed_at: string | null
+        }) => ({
+          business_id:   business.id,
+          user_id:       user.id,
+          review_text:   r.review_text,
+          reviewer_name: r.reviewer_name,
+          rating:        r.rating,
+          reviewed_at:   r.reviewed_at,
+          sentiment:     null,
+        }))
+        await supabase.from('reviews').insert(rows)
+      }
+
+      await supabase.from('businesses').update({ reviews_fetched_at: new Date().toISOString() }).eq('id', business.id)
+
+      // Full reload with fresh data
+      await reloadDashboard(false)
+    } catch (e: unknown) {
+      setFetchError(e instanceof Error ? e.message : 'Failed to fetch reviews')
+    } finally {
+      setFetchingReviews(false)
+    }
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────
+
+  if (initializing || loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="flex items-center gap-3 text-gray-500 text-sm">
@@ -115,11 +411,11 @@ export default function Dashboard() {
     )
   }
 
-  if (dashError) {
+  if (error) {
     return (
       <div className="card p-6 text-red-400 text-sm flex items-center gap-3">
-        <span>⚠ {dashError}</span>
-        <button onClick={() => loadDashboard(false, true)} className="underline hover:no-underline">Retry</button>
+        <span>⚠ {error}</span>
+        <button onClick={() => reloadDashboard()} className="underline hover:no-underline">Retry</button>
       </div>
     )
   }
@@ -129,7 +425,7 @@ export default function Dashboard() {
   const positivePercent = Math.round((sc.positive / total) * 100)
   const negativePercent = Math.round((sc.negative / total) * 100)
   const reputationScore = business?.reputation_score ?? dbScore
-  const hasAnalysis = reviews.some((r: Review) => r.sentiment !== null)
+  const hasAnalysis = reviews.some(r => r.sentiment !== null)
   const analyzedAt = formatTimestamp(business?.analyzed_at)
   const fetchedAt  = formatTimestamp(business?.reviews_fetched_at)
   const reviewsStale = isStale(business?.reviews_fetched_at, 7)
@@ -157,11 +453,11 @@ export default function Dashboard() {
             )}
           </div>
           <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-            {dashFromCache && !analysisLoading && (
+            {fromCache && !analysisLoading && (
               <span className="text-[11px] text-emerald-600">✓ Loaded from cache</span>
             )}
             {fetchedAt && (
-              <p className="text-[11px] text-gray-600">{dashFromCache ? '·' : ''} Last updated: {fetchedAt}</p>
+              <p className="text-[11px] text-gray-600">{fromCache ? '·' : ''} Last updated: {fetchedAt}</p>
             )}
             {analyzedAt && !analysisLoading && (
               <p className="text-[11px] text-gray-600">· Analyzed: {analyzedAt}</p>
@@ -189,7 +485,7 @@ export default function Dashboard() {
           )}
           {hasAnalysis && (
             <button
-              onClick={() => loadDashboard(true)}
+              onClick={() => reloadDashboard(true)}
               disabled={analysisLoading || fetchingReviews}
               title="Force re-analysis with Anthropic AI"
               className="min-h-[44px] px-3 py-2 text-xs text-purple-400 border border-purple-500/30 hover:bg-purple-500/10 rounded-lg transition-all disabled:opacity-40"
@@ -198,8 +494,8 @@ export default function Dashboard() {
             </button>
           )}
           <button
-            onClick={() => loadDashboard(false, true)}
-            disabled={dashLoading || analysisLoading || fetchingReviews}
+            onClick={() => reloadDashboard(false)}
+            disabled={loading || analysisLoading || fetchingReviews}
             className="btn-primary min-h-[44px] px-4 py-2 text-xs flex items-center gap-1.5"
           >
             ↻ Refresh
@@ -213,10 +509,7 @@ export default function Dashboard() {
           <span className="text-amber-400 text-xs">
             ⚠ Your reviews are {fetchedAt ? 'over 7 days old' : 'not yet fetched from Google'}.
           </span>
-          <button
-            onClick={fetchNewReviews}
-            className="text-xs text-amber-400 underline hover:no-underline"
-          >
+          <button onClick={fetchNewReviews} className="text-xs text-amber-400 underline hover:no-underline">
             Fetch now
           </button>
         </div>
@@ -342,7 +635,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {reviews.length === 0 && !dashLoading && (
+      {reviews.length === 0 && !loading && (
         <div className="card p-8 text-center">
           <p className="text-3xl mb-3">📝</p>
           <p className="text-sm text-gray-300 font-medium mb-1">No reviews yet</p>
