@@ -293,6 +293,10 @@ export default function Dashboard() {
   const reviewsScrollRef = useRef<HTMLDivElement>(null)
   const [reviewsAtBottom, setReviewsAtBottom] = useState(false)
 
+  // ── Pagination ──
+  const REVIEWS_PAGE_SIZE = 15
+  const [visibleCount, setVisibleCount] = useState(REVIEWS_PAGE_SIZE)
+
   // ── On mount / business switch: load from store → Supabase (never auto-call Anthropic) ──
 
   useEffect(() => {
@@ -1086,7 +1090,7 @@ export default function Dashboard() {
                 )}
               </h3>
               <p className="text-[11px] text-gray-500 mt-0.5">
-                Showing {filteredReviews.length} review{filteredReviews.length !== 1 ? 's' : ''}
+                Showing {Math.min(visibleCount, filteredReviews.length)} of {filteredReviews.length} review{filteredReviews.length !== 1 ? 's' : ''}
                 {filteredReviews.length !== reviews.length && ` (filtered from ${reviews.length})`}
               </p>
             </div>
@@ -1095,7 +1099,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-2 flex-wrap">
               <select
                 value={filterTime}
-                onChange={e => { setFilterTime(e.target.value as typeof filterTime); setReviewsAtBottom(false) }}
+                onChange={e => { setFilterTime(e.target.value as typeof filterTime); setReviewsAtBottom(false); setVisibleCount(REVIEWS_PAGE_SIZE) }}
                 className="text-xs bg-[#080d1a] border border-[#1e2d4a] text-gray-300 rounded-lg px-2 py-1.5 min-h-[34px] focus:outline-none focus:border-purple-500/50"
               >
                 <option value="all">All time</option>
@@ -1105,7 +1109,7 @@ export default function Dashboard() {
               </select>
               <select
                 value={filterSentiment}
-                onChange={e => { setFilterSentiment(e.target.value as typeof filterSentiment); setReviewsAtBottom(false) }}
+                onChange={e => { setFilterSentiment(e.target.value as typeof filterSentiment); setReviewsAtBottom(false); setVisibleCount(REVIEWS_PAGE_SIZE) }}
                 className="text-xs bg-[#080d1a] border border-[#1e2d4a] text-gray-300 rounded-lg px-2 py-1.5 min-h-[34px] focus:outline-none focus:border-purple-500/50"
               >
                 <option value="all">All sentiment</option>
@@ -1115,7 +1119,7 @@ export default function Dashboard() {
               </select>
               <select
                 value={filterSort}
-                onChange={e => { setFilterSort(e.target.value as typeof filterSort); setReviewsAtBottom(false) }}
+                onChange={e => { setFilterSort(e.target.value as typeof filterSort); setReviewsAtBottom(false); setVisibleCount(REVIEWS_PAGE_SIZE) }}
                 className="text-xs bg-[#080d1a] border border-[#1e2d4a] text-gray-300 rounded-lg px-2 py-1.5 min-h-[34px] focus:outline-none focus:border-purple-500/50"
               >
                 <option value="newest">Newest first</option>
@@ -1130,7 +1134,8 @@ export default function Dashboard() {
               <p className="text-xs text-gray-500">No reviews match the current filters.</p>
             </div>
           ) : (
-            /* Scroll container with fade-out */
+            /* Scroll container with fade-out + load more */
+            <>
             <div className="relative">
               <div
                 ref={reviewsScrollRef}
@@ -1143,7 +1148,7 @@ export default function Dashboard() {
                 style={{ height: '600px', overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: '#7c3aed #1e2030' }}
                 className="reviews-scroll divide-y divide-[#1e2d4a]"
               >
-                {filteredReviews.map(r => {
+                {filteredReviews.slice(0, visibleCount).map(r => {
                   const isExpanded = expandedReviews.has(r.id)
                   const isLong = r.review_text.length > 220
                   const displayText = isLong && !isExpanded
@@ -1225,6 +1230,22 @@ export default function Dashboard() {
                 />
               )}
             </div>
+
+            {/* Load more button */}
+            {visibleCount < filteredReviews.length && (
+              <div className="px-6 py-4 border-t border-[#1e2d4a] flex items-center justify-between">
+                <span className="text-[11px] text-gray-600">
+                  {filteredReviews.length - visibleCount} more review{filteredReviews.length - visibleCount !== 1 ? 's' : ''} not shown
+                </span>
+                <button
+                  onClick={() => { setVisibleCount(v => v + REVIEWS_PAGE_SIZE); setReviewsAtBottom(false) }}
+                  className="text-xs font-semibold text-purple-400 hover:text-purple-300 border border-purple-500/30 hover:border-purple-500/60 px-4 py-1.5 rounded-lg transition-all hover:bg-purple-500/10"
+                >
+                  Load more
+                </button>
+              </div>
+            )}
+            </>
           )}
         </div>
       )}
