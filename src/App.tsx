@@ -14,6 +14,13 @@ import CompetitorSpy from './pages/CompetitorSpy'
 import AIInsights from './pages/AIInsights'
 import AlertSettings from './pages/AlertSettings'
 
+// ── Admin ──────────────────────────────────────────────────────────────────
+
+const ADMIN_EMAIL = 'pajamapoems00@gmail.com'
+
+const isAdmin = (email: string | null | undefined): boolean =>
+  email === ADMIN_EMAIL
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type Page     = 'dashboard' | 'responder' | 'competitors' | 'insights' | 'alerts'
@@ -52,6 +59,7 @@ function Sidebar({
   onSwitchBusiness,
   onAddBusiness,
   userEmail,
+  userIsAdmin,
   onSignOut,
   onClose,
 }: {
@@ -62,6 +70,7 @@ function Sidebar({
   onSwitchBusiness: (biz: Business) => void
   onAddBusiness: () => void
   userEmail: string
+  userIsAdmin: boolean
   onSignOut: () => void
   onClose?: () => void
 }) {
@@ -145,7 +154,14 @@ function Sidebar({
             {(activeBusiness?.name || userEmail)[0]?.toUpperCase() ?? 'U'}
           </div>
           <div className="min-w-0 flex-1 text-left">
-            <p className="text-xs font-medium text-gray-300 truncate">{activeBusiness?.name ?? 'My Business'}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-xs font-medium text-gray-300 truncate">{activeBusiness?.name ?? 'My Business'}</p>
+              {userIsAdmin && (
+                <span className="shrink-0 text-[9px] font-bold px-1.5 py-px rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  ADMIN
+                </span>
+              )}
+            </div>
             <p className="text-[10px] text-gray-600 truncate">{userEmail}</p>
           </div>
           <svg
@@ -334,7 +350,7 @@ function AuthenticatedApp() {
 
   const handleAddBusinessClick = () => {
     const FREE_LIMIT = 1
-    if (allBusinesses.length >= FREE_LIMIT) {
+    if (!isAdmin(user?.email) && allBusinesses.length >= FREE_LIMIT) {
       setShowUpgradeModal(true)
     } else {
       setAddingBusiness(true)
@@ -389,6 +405,7 @@ function AuthenticatedApp() {
           onSwitchBusiness={handleSwitchBusiness}
           onAddBusiness={handleAddBusinessClick}
           userEmail={user?.email ?? ''}
+          userIsAdmin={isAdmin(user?.email)}
           onSignOut={handleSignOut}
         />
       </div>
@@ -411,6 +428,7 @@ function AuthenticatedApp() {
               onSwitchBusiness={handleSwitchBusiness}
               onAddBusiness={handleAddBusinessClick}
               userEmail={user?.email ?? ''}
+              userIsAdmin={isAdmin(user?.email)}
               onSignOut={handleSignOut}
               onClose={() => setSidebarOpen(false)}
             />
