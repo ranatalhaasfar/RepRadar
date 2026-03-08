@@ -187,20 +187,24 @@ export default function Dashboard() {
 
       if (revs.length === 0) return
 
-      // Count unanalyzed reviews (sentiment === null)
-      const unanalyzedCount = revs.filter(r => r.sentiment === null).length
+      // Split reviews into analyzed vs unanalyzed
+      const unanalyzedRevs = revs.filter(r => r.sentiment === null)
       const hasKeywords = Array.isArray(bizData.keywords) && bizData.keywords.length > 0
 
-      if (!forceReanalyze && unanalyzedCount === 0) {
-        // ✅ Fully cached — load from DB, never call Anthropic
+      if (!forceReanalyze && unanalyzedRevs.length === 0) {
+        // ✅ All reviews already have sentiment — load from cache, NO Anthropic call
         console.log('[Dashboard] ✅ All reviews analyzed — loading from cache, NO Anthropic call')
         setKeywords(hasKeywords ? bizData.keywords! : [])
         setTimeline(buildTimeline(revs))
         setFromCache(true)
-      } else if (forceReanalyze || unanalyzedCount > 0) {
-        // 🔄 Unanalyzed reviews exist OR explicit re-analyze — call Anthropic once
-        console.log('[Dashboard] 🌐 Calling Anthropic —', forceReanalyze ? 'forced re-analyze' : `${unanalyzedCount} unanalyzed reviews`)
-        await runAnalysis(revs, bizData.id)
+      } else if (forceReanalyze) {
+        // 🔄 User explicitly clicked Re-analyze — re-run on all reviews
+        console.log('[Dashboard] 🌐 Forced re-analyze — calling Anthropic')
+        await runAnalysis(revs, bizData.id, revs)
+      } else {
+        // 🔄 New unanalyzed reviews exist — only analyze those, leave already-analyzed ones alone
+        console.log(`[Dashboard] 🌐 ${unanalyzedRevs.length} new unanalyzed reviews — calling Anthropic`)
+        await runAnalysis(unanalyzedRevs, bizData.id, revs)
       }
     } catch (e: unknown) {
       console.error('[Dashboard] loadData error:', e)
@@ -210,47 +214,59 @@ export default function Dashboard() {
     }
   }
 
-  const runAnalysis = async (revs: Review[], businessId: string) => {
+  // revsToAnalyze: the reviews we're sending to Anthropic (may be a subset)
+  // allRevs: the full review list (to merge results back into)
+  const runAnalysis = async (revsToAnalyze: Review[], businessId: string, allRevs: Review[]) => {
     setAnalysisLoading(true)
     setAnalysisError('')
     try {
       const res = await fetch('/api/analyze-reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reviews: revs.map(r => r.review_text) }),
+        body: JSON.stringify({ reviews: revsToAnalyze.map(r => r.review_text) }),
       })
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error ?? `API error ${res.status}`)
 
       const data: AnalysisResult = payload
 
-      // Persist per-review sentiments
-      const updatedRevs: Review[] = revs.map((r, i) => ({
-        ...r,
-        sentiment: (data.reviewSentiments[i] ?? 'neutral') as 'positive' | 'negative' | 'neutral',
-      }))
-      for (let i = 0; i < revs.length; i++) {
+      // Build a map of id → new sentiment for the analyzed subset
+      const sentimentMap = new Map<string, 'positive' | 'negative' | 'neutral'>()
+      revsToAnalyze.forEach((r, i) => {
+        sentimentMap.set(r.id, (data.reviewSentiments[i] ?? 'neutral') as 'positive' | 'negative' | 'neutral')
+      })
+
+      // Persist sentiments — only update the reviews we analyzed
+      for (const r of revsToAnalyze) {
         await supabase
           .from('reviews')
-          .update({ sentiment: updatedRevs[i].sentiment })
-          .eq('id', revs[i].id)
+          .update({ sentiment: sentimentMap.get(r.id) })
+          .eq('id', r.id)
       }
+
+      // Merge new sentiments back into the full review list
+      const mergedRevs: Review[] = allRevs.map(r =>
+        sentimentMap.has(r.id) ? { ...r, sentiment: sentimentMap.get(r.id)! } : r
+      )
+
+      // Recompute overall stats from the full merged list
+      const { score: newScore } = computeStats(mergedRevs)
 
       // Persist score, keywords, and analyzed_at to businesses table
       const now = new Date().toISOString()
       await supabase
         .from('businesses')
         .update({
-          total_reviews: revs.length,
-          reputation_score: data.reputationScore,
-          keywords: data.topKeywords ?? [],
-          analyzed_at: now,
+          total_reviews:    mergedRevs.length,
+          reputation_score: data.reputationScore ?? newScore,
+          keywords:         data.topKeywords ?? [],
+          analyzed_at:      now,
         })
         .eq('id', businessId)
 
-      setReviews(updatedRevs)
+      setReviews(mergedRevs)
       setKeywords(data.topKeywords ?? [])
-      setTimeline(buildTimeline(updatedRevs))
+      setTimeline(buildTimeline(mergedRevs))
 
       // Refresh business row to pick up all cached fields
       const { data: refreshed } = await supabase
@@ -448,7 +464,7 @@ export default function Dashboard() {
         <div className="card p-3 border-amber-500/30 flex items-center gap-3">
           <span className="text-amber-400 text-xs">⚠ Analysis error: {analysisError}</span>
           <button
-            onClick={() => business && runAnalysis(reviews, business.id)}
+            onClick={() => business && runAnalysis(reviews, business.id, reviews)}
             className="text-xs text-amber-400 underline hover:no-underline"
           >
             Retry

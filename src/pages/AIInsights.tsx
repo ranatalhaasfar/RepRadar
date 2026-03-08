@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
@@ -95,8 +95,8 @@ function formatAnalyzedAt(ts: string): string {
 
 export default function AIInsights() {
   const { user } = useAuth()
-  const hasFetched = useRef(false)
   const [insights, setInsights]     = useState<Insight[]>([])
+  const [noReviews, setNoReviews]   = useState(false)
   const [expanded, setExpanded]     = useState<Set<number>>(new Set())
   const [loading, setLoading]       = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -105,23 +105,17 @@ export default function AIInsights() {
   const [error, setError]           = useState('')
   const [fromCache, setFromCache]   = useState(false)
 
+  // On mount: ONLY load from cache — never call Anthropic automatically
   useEffect(() => {
-    if (user && !hasFetched.current) {
-      hasFetched.current = true
-      loadInsights()
-    }
+    if (user) loadFromCache()
   }, [user])
 
-  // ── Load: DB-first, only call Anthropic when no cached insights ──────────
+  // ── Load from Supabase cache only — zero Anthropic calls ─────────────────
 
-  const loadInsights = async (forceRefresh = false) => {
-    if (forceRefresh) setRefreshing(true)
-    else setLoading(true)
+  const loadFromCache = async () => {
+    setLoading(true)
     setError('')
-    setFromCache(false)
-
     try {
-      // 1. Get user's business
       const { data: bizData, error: bizErr } = await supabase
         .from('businesses')
         .select('id, name, type')
@@ -131,45 +125,61 @@ export default function AIInsights() {
       if (bizErr) throw new Error(`Business load error: ${bizErr.message}`)
       if (!bizData) { setInsights([]); return }
 
-      // 2. Check for cached insights in DB
-      if (!forceRefresh) {
-        const { data: cached, error: cacheErr } = await supabase
-          .from('insights')
-          .select('*')
-          .eq('business_id', bizData.id)
-          .order('created_at', { ascending: false })
+      const { data: cached, error: cacheErr } = await supabase
+        .from('insights')
+        .select('*')
+        .eq('business_id', bizData.id)
+        .order('created_at', { ascending: false })
 
-        console.log('[AIInsights] cache check — rows:', cached?.length ?? 0, 'error:', cacheErr?.message ?? null)
-
-        if (!cacheErr && cached && cached.length > 0) {
-          console.log('[AIInsights] ✅ Loading from cache — NO Anthropic call')
-          const loaded = cached.map((row, i) => ({
-            id: i,
-            icon: row.icon ?? '💡',
-            category: row.category as Category,
-            title: row.title,
-            description: row.description,
-            recommendation: row.recommendation,
-            impact: row.impact as Impact,
-          }))
-          setInsights(loaded)
-          setAnalyzedAt(cached[0].created_at)
-          setFromCache(true)
-          return
-        }
-
-        // If there's a cache error (e.g., table doesn't exist), do NOT call Anthropic on page load
-        if (cacheErr) {
-          console.error('[AIInsights] Cache read error — NOT calling Anthropic:', cacheErr.message)
-          throw new Error(`Cache error: ${cacheErr.message}. Run the DB migration to create the insights table.`)
-        }
-
-        // Only call Anthropic if cache is genuinely empty (0 rows)
-        console.log('[AIInsights] 🌐 No cached insights found — will call Anthropic')
+      if (cacheErr) {
+        console.error('[AIInsights] Cache read error:', cacheErr.message)
+        throw new Error(`Cache error: ${cacheErr.message}. Run the DB migration to create the insights table.`)
       }
 
-      // 3. No cached data (or forced refresh) — fetch reviews and call Anthropic
-      console.log('[AIInsights] 🌐 Calling Anthropic API —', forceRefresh ? 'forced refresh' : 'no cache found')
+      if (cached && cached.length > 0) {
+        console.log('[AIInsights] ✅ Loaded from cache — NO Anthropic call')
+        setInsights(cached.map((row, i) => ({
+          id: i,
+          icon:           row.icon ?? '💡',
+          category:       row.category as Category,
+          title:          row.title,
+          description:    row.description,
+          recommendation: row.recommendation,
+          impact:         row.impact as Impact,
+        })))
+        setAnalyzedAt(cached[0].created_at)
+        setFromCache(true)
+      } else {
+        // No cached insights — check if reviews exist so we can show the right empty state
+        const { count } = await supabase
+          .from('reviews')
+          .select('id', { count: 'exact', head: true })
+          .eq('business_id', bizData.id)
+        setNoReviews((count ?? 0) === 0)
+        setInsights([])
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to load insights')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ── Refresh: called ONLY when user clicks the button ─────────────────────
+
+  const refreshInsights = async () => {
+    setRefreshing(true)
+    setError('')
+    try {
+      const { data: bizData, error: bizErr } = await supabase
+        .from('businesses')
+        .select('id, name, type')
+        .eq('user_id', user!.id)
+        .limit(1)
+        .maybeSingle()
+      if (bizErr) throw new Error(`Business load error: ${bizErr.message}`)
+      if (!bizData) return
+
       const { data: revData, error: revErr } = await supabase
         .from('reviews')
         .select('review_text')
@@ -178,19 +188,16 @@ export default function AIInsights() {
 
       const texts = (revData ?? []).map(r => r.review_text)
       if (texts.length === 0) {
+        setNoReviews(true)
         setInsights([])
         return
       }
 
-      // 4. Call Express backend → Anthropic
+      console.log('[AIInsights] 🌐 User clicked Refresh — calling Anthropic API')
       const res = await fetch('/api/generate-insights', {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          businessName: bizData.name,
-          businessType: bizData.type,
-          reviews: texts,
-        }),
+        body:    JSON.stringify({ businessName: bizData.name, businessType: bizData.type, reviews: texts }),
       })
       if (!res.ok) {
         const errData = await res.json().catch(() => ({ error: res.statusText }))
@@ -199,42 +206,28 @@ export default function AIInsights() {
       const data = await res.json()
       const rawInsights: Omit<Insight, 'id'>[] = data.insights ?? []
 
-      // 5. Delete old insights and save new ones to DB
+      // Save to DB (replace old rows)
       await supabase.from('insights').delete().eq('business_id', bizData.id)
-
       const now = new Date().toISOString()
       const rows = rawInsights.map(ins => ({
-        business_id:    bizData.id,
-        user_id:        user!.id,
-        icon:           ins.icon,
-        category:       ins.category,
-        title:          ins.title,
-        description:    ins.description,
-        recommendation: ins.recommendation,
-        impact:         ins.impact,
-        created_at:     now,
+        business_id: bizData.id, user_id: user!.id,
+        icon: ins.icon, category: ins.category, title: ins.title,
+        description: ins.description, recommendation: ins.recommendation,
+        impact: ins.impact, created_at: now,
       }))
-
       if (rows.length > 0) {
         const { error: insertErr } = await supabase.from('insights').insert(rows)
-        if (insertErr) {
-          console.error('[AIInsights] ❌ insert error (cache NOT saved):', insertErr.message, insertErr.code)
-        } else {
-          console.log('[AIInsights] ✅ Insights saved to DB —', rows.length, 'rows. Next visit will load from cache.')
-        }
+        if (insertErr) console.error('[AIInsights] ❌ insert error:', insertErr.message)
+        else console.log('[AIInsights] ✅ Insights saved to DB —', rows.length, 'rows')
       }
 
-      // 6. Update local state
-      const insightsWithIds = rawInsights.map((ins, i) => ({ ...ins, id: i }))
-      setInsights(insightsWithIds)
+      setInsights(rawInsights.map((ins, i) => ({ ...ins, id: i })))
       setAnalyzedAt(now)
-
+      setFromCache(false)
+      setNoReviews(false)
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Failed to load insights'
-      console.error('[AIInsights] loadInsights error:', e)
-      setError(msg)
+      setError(e instanceof Error ? e.message : 'Failed to generate insights')
     } finally {
-      setLoading(false)
       setRefreshing(false)
     }
   }
@@ -284,7 +277,7 @@ export default function AIInsights() {
           )}
         </div>
         <button
-          onClick={() => loadInsights(true)}
+          onClick={refreshInsights}
           disabled={refreshing}
           className="btn-primary px-4 py-2 text-xs flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -304,16 +297,22 @@ export default function AIInsights() {
       {error && (
         <div className="card p-4 text-red-400 text-sm flex items-center gap-3">
           <span>⚠ {error}</span>
-          <button onClick={() => loadInsights()} className="underline hover:no-underline">Retry</button>
+          <button onClick={loadFromCache} className="underline hover:no-underline">Retry</button>
         </div>
       )}
 
-      {/* No reviews */}
+      {/* Empty state */}
       {!error && insights.length === 0 && (
         <div className="card p-8 text-center">
-          <p className="text-3xl mb-3">🧠</p>
-          <p className="text-sm text-gray-300 font-medium mb-1">No insights yet</p>
-          <p className="text-xs text-gray-500">Add reviews during onboarding to generate AI insights.</p>
+          <p className="text-3xl mb-3">{noReviews ? '📋' : '🧠'}</p>
+          <p className="text-sm text-gray-300 font-medium mb-1">
+            {noReviews ? 'No reviews yet' : 'No insights generated yet'}
+          </p>
+          <p className="text-xs text-gray-500">
+            {noReviews
+              ? 'Fetch your Google reviews first, then click Refresh Insights to generate AI analysis.'
+              : 'Click "Refresh Insights" above to generate AI insights from your reviews.'}
+          </p>
         </div>
       )}
 
