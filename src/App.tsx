@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { useAppStore } from './store/appStore'
+import { lcClearAll } from './lib/localCache'
 import { supabase } from './lib/supabase'
 import type { Business } from './lib/supabase'
 import Login from './pages/auth/Login'
@@ -329,6 +330,7 @@ function AuthenticatedApp() {
 
   const handleSignOut = () => {
     clearAll()
+    lcClearAll()
     signOut()
   }
 

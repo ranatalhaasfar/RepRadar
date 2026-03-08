@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useAppStore } from '../store/appStore'
+import { lcSave, lcLoad, lcClear } from '../lib/localCache'
 import type { Insight } from '../store/appStore'
 
 // ── Styles ──────────────────────────────────────────────────────────────────
@@ -85,47 +86,57 @@ function formatTimestamp(ms: number): string {
 export default function AIInsights() {
   const { user } = useAuth()
 
-  // ── Zustand store ──
-  const { activeBusiness, insights, insightsLoadedAt, insightsBusinessId, setInsights, clearInsights } = useAppStore()
+  // ── Zustand store (Layer 1) ──
+  const {
+    activeBusiness,
+    insights, insightsLoadedAt, insightsBusinessId,
+    setInsights, clearInsights,
+  } = useAppStore()
 
   // ── Local UI state ──
   const [loading,    setLoading]    = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [noReviews,  setNoReviews]  = useState(false)
-  const [fromCache,  setFromCache]  = useState(false)
+  const [cacheSource, setCacheSource] = useState<'zustand' | 'localStorage' | 'supabase' | 'api' | null>(null)
   const [error,      setError]      = useState('')
   const [filter,     setFilter]     = useState<'All' | Impact>('All')
   const [expanded,   setExpanded]   = useState<Set<number>>(new Set())
 
-  // ── On mount / business switch: load from store → Supabase → (never auto-call Anthropic) ──
+  // ── On mount / business switch ──
 
   useEffect(() => {
-    if (!user) return
+    if (!user || !activeBusiness) return
     loadInsights()
   }, [user?.id, activeBusiness?.id])
 
   const loadInsights = async () => {
-    if (!user) return
+    if (!user || !activeBusiness) return
+    const bizId = activeBusiness.id
     setError('')
 
-    const bizData = activeBusiness
-    if (!bizData) { setLoading(false); return }
-
-    // 1️⃣ Store hit — insights already in memory for this business
-    if (insightsBusinessId === bizData.id && insights.length > 0) {
-      console.log('[AIInsights] ✅ Store hit — rendering from Zustand, zero DB calls')
-      setFromCache(true)
-      setLoading(false)
+    // ─── Layer 1: Zustand store (in-memory, survives tab switches but not refreshes) ───
+    if (insightsBusinessId === bizId && insights.length > 0) {
+      console.log('[AIInsights] ✅ Layer 1 hit — Zustand store')
+      setCacheSource('zustand')
       return
     }
 
-    // 2️⃣ Store miss — try Supabase cache
+    // ─── Layer 2: localStorage (survives browser refresh) ───
+    const lsData = lcLoad<Insight[]>('insights', bizId)
+    if (lsData && lsData.data.length > 0) {
+      console.log('[AIInsights] ✅ Layer 2 hit — localStorage', `(saved ${new Date(lsData.savedAt).toLocaleTimeString()})`)
+      setInsights(lsData.data, bizId)
+      setCacheSource('localStorage')
+      return
+    }
+
+    // ─── Layer 3: Supabase (permanent DB storage) ───
     setLoading(true)
     try {
       const { data: cached, error: cacheErr } = await supabase
         .from('insights')
         .select('*')
-        .eq('business_id', bizData.id)
+        .eq('business_id', bizId)
         .order('created_at', { ascending: false })
 
       if (cacheErr) {
@@ -133,8 +144,7 @@ export default function AIInsights() {
       }
 
       if (cached && cached.length > 0) {
-        // Supabase has rows → load into Zustand store
-        console.log('[AIInsights] ✅ Supabase cache hit — saving to Zustand store')
+        console.log('[AIInsights] ✅ Layer 3 hit — Supabase')
         const loaded: Insight[] = cached.map((row, i) => ({
           id:             i,
           icon:           row.icon ?? '💡',
@@ -144,16 +154,18 @@ export default function AIInsights() {
           recommendation: row.recommendation,
           impact:         row.impact as Impact,
         }))
-        setInsights(loaded, bizData.id)
-        setFromCache(true)
+        // Save to both Layer 1 and Layer 2
+        setInsights(loaded, bizId)
+        lcSave('insights', bizId, loaded)
+        setCacheSource('supabase')
       } else {
-        // Supabase is empty — no auto-call to Anthropic, show empty state
+        // ─── All 3 layers empty ───
         const { count } = await supabase
           .from('reviews')
           .select('id', { count: 'exact', head: true })
-          .eq('business_id', bizData.id)
+          .eq('business_id', bizId)
         setNoReviews((count ?? 0) === 0)
-        setFromCache(false)
+        setCacheSource(null)
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load insights')
@@ -162,34 +174,39 @@ export default function AIInsights() {
     }
   }
 
-  // ── Refresh: user-initiated only → clears store + DB, regenerates ────────
+  // ── Refresh: clears all 3 layers, regenerates from Anthropic ─────────────
 
   const handleRefresh = async () => {
-    if (!user) return
+    if (!user || !activeBusiness) return
+    const bizId = activeBusiness.id
     setRefreshing(true)
     setError('')
     try {
-      const bizData = activeBusiness
-      if (!bizData) return
-
       const { data: revData, error: revErr } = await supabase
         .from('reviews')
         .select('review_text')
-        .eq('business_id', bizData.id)
+        .eq('business_id', bizId)
       if (revErr) throw new Error(`Reviews load error: ${revErr.message}`)
 
       const texts = (revData ?? []).map(r => r.review_text)
       if (texts.length === 0) {
         setNoReviews(true)
+        // Clear all 3 layers
         clearInsights()
+        lcClear('insights', bizId)
+        await supabase.from('insights').delete().eq('business_id', bizId)
         return
       }
 
-      console.log('[AIInsights] 🌐 Refresh clicked — calling Anthropic API')
+      console.log('[AIInsights] 🌐 Refresh — calling Anthropic API')
       const res = await fetch('/api/generate-insights', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ businessName: bizData.name, businessType: bizData.type, reviews: texts }),
+        body:    JSON.stringify({
+          businessName: activeBusiness.name,
+          businessType: activeBusiness.type,
+          reviews: texts,
+        }),
       })
       if (!res.ok) {
         const errData = await res.json().catch(() => ({ error: res.statusText }))
@@ -197,26 +214,33 @@ export default function AIInsights() {
       }
       const data = await res.json()
       const rawInsights: Omit<Insight, 'id'>[] = data.insights ?? []
+      const fresh = rawInsights.map((ins, i) => ({ ...ins, id: i }))
 
-      // Clear old Supabase rows, insert fresh
-      await supabase.from('insights').delete().eq('business_id', bizData.id)
+      // Save to Layer 3: Supabase
+      await supabase.from('insights').delete().eq('business_id', bizId)
       const now = new Date().toISOString()
       const rows = rawInsights.map(ins => ({
-        business_id: bizData.id, user_id: user.id,
+        business_id: bizId, user_id: user.id,
         icon: ins.icon, category: ins.category, title: ins.title,
         description: ins.description, recommendation: ins.recommendation,
         impact: ins.impact, created_at: now,
       }))
       if (rows.length > 0) {
         const { error: insertErr } = await supabase.from('insights').insert(rows)
-        if (insertErr) console.error('[AIInsights] ❌ insert error:', insertErr.message)
+        if (insertErr) console.error('[AIInsights] ❌ Supabase insert error:', insertErr.message)
+        else console.log('[AIInsights] ✅ Layer 3 saved — Supabase')
       }
 
-      // Save fresh insights to Zustand store
-      const fresh = rawInsights.map((ins, i) => ({ ...ins, id: i }))
-      setInsights(fresh, bizData.id)
+      // Save to Layer 2: localStorage
+      lcSave('insights', bizId, fresh)
+      console.log('[AIInsights] ✅ Layer 2 saved — localStorage')
+
+      // Save to Layer 1: Zustand
+      setInsights(fresh, bizId)
+      console.log('[AIInsights] ✅ Layer 1 saved — Zustand')
+
       setNoReviews(false)
-      setFromCache(false)
+      setCacheSource('api')
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to generate insights')
     } finally {
@@ -235,6 +259,16 @@ export default function AIInsights() {
   }
 
   const filtered = filter === 'All' ? insights : insights.filter(i => i.impact === filter)
+
+  const cacheLabel = cacheSource === 'zustand'
+    ? '⚡ From memory'
+    : cacheSource === 'localStorage'
+    ? '💾 From browser cache'
+    : cacheSource === 'supabase'
+    ? '🗄 From database'
+    : cacheSource === 'api'
+    ? '✨ Just generated'
+    : null
 
   // ── Loading state ────────────────────────────────────────────────────────
 
@@ -259,16 +293,18 @@ export default function AIInsights() {
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-100">AI Insights</h1>
-          {insightsLoadedAt ? (
-            <p className="text-gray-500 text-sm mt-1 flex items-center gap-2 flex-wrap">
-              {fromCache && <span className="text-emerald-600 text-xs">✓ Loaded from cache ·</span>}
-              Last updated: {formatTimestamp(insightsLoadedAt)}
-            </p>
-          ) : (
-            <p className="text-gray-500 text-sm mt-1">
-              Intelligence generated from your customer reviews.
-            </p>
-          )}
+          <div className="flex items-center gap-2 flex-wrap mt-1">
+            {cacheLabel && (
+              <span className="text-emerald-500 text-xs">{cacheLabel}</span>
+            )}
+            {insightsLoadedAt ? (
+              <p className="text-gray-500 text-xs">
+                {cacheLabel ? '·' : ''} Last updated: {formatTimestamp(insightsLoadedAt)}
+              </p>
+            ) : (
+              <p className="text-gray-500 text-sm">Intelligence generated from your customer reviews.</p>
+            )}
+          </div>
         </div>
         <button
           onClick={handleRefresh}

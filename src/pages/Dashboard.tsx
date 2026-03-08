@@ -6,6 +6,7 @@ import {
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useAppStore } from '../store/appStore'
+import { lcSave, lcLoad, lcClear } from '../lib/localCache'
 import type { Business, Review } from '../lib/supabase'
 import type { SentimentPoint, Category } from '../store/appStore'
 
@@ -211,8 +212,7 @@ export default function Dashboard() {
 
     // 1️⃣ Zustand store hit — render instantly
     if (dashboardBusinessId === bizData.id && dashboardLoadedAt !== null && reviews.length > 0) {
-      console.log('[Dashboard] ✅ Store hit — rendering from Zustand, zero DB calls')
-      // Rebuild derived state from store data
+      console.log('[Dashboard] ✅ Layer 1 hit — Zustand store')
       setKeywords(Array.isArray(bizData.keywords) ? bizData.keywords : [])
       setTimeline(buildTimeline(reviews))
       setFromCache(true)
@@ -220,7 +220,21 @@ export default function Dashboard() {
       return
     }
 
-    // 2️⃣ Store miss — load from Supabase
+    // 2️⃣ localStorage hit — survives browser refresh
+    const lsData = lcLoad<{ business: Business; reviews: Review[] }>('reviews', bizData.id)
+    if (lsData && lsData.data.reviews.length > 0) {
+      console.log('[Dashboard] ✅ Layer 2 hit — localStorage', `(saved ${new Date(lsData.savedAt).toLocaleTimeString()})`)
+      const { business: cachedBiz, reviews: cachedRevs } = lsData.data
+      setDashboard(cachedBiz, cachedRevs, bizData.id)
+      setKeywords(Array.isArray(cachedBiz.keywords) ? cachedBiz.keywords : [])
+      setTimeline(buildTimeline(cachedRevs))
+      setFromCache(true)
+      setInitializing(false)
+      return
+    }
+
+    // 3️⃣ Supabase — permanent DB storage
+    console.log('[Dashboard] 🗄 Layer 3 — fetching from Supabase')
     setLoading(true)
     try {
       const { data: revData, error: revErr } = await supabase
@@ -232,8 +246,12 @@ export default function Dashboard() {
 
       const revs: Review[] = revData ?? []
 
-      // Save to Zustand store
+      // Save to Layer 1 (Zustand) and Layer 2 (localStorage)
       setDashboard(bizData as Business, revs, bizData.id)
+      if (revs.length > 0) {
+        lcSave('reviews', bizData.id, { business: bizData as Business, reviews: revs })
+        console.log('[Dashboard] ✅ Layer 3 hit — Supabase, saved to localStorage')
+      }
 
       if (revs.length === 0) {
         setInitializing(false)
@@ -278,6 +296,9 @@ export default function Dashboard() {
       const bizData = activeBusiness
       if (!bizData) return
 
+      // Clear Layer 2 (localStorage) so we reload fresh from Supabase
+      lcClear('reviews', bizData.id)
+
       const { data: revData, error: revErr } = await supabase
         .from('reviews')
         .select('*')
@@ -287,6 +308,9 @@ export default function Dashboard() {
 
       const revs: Review[] = revData ?? []
       setDashboard(bizData as Business, revs, bizData.id)
+      if (revs.length > 0) {
+        lcSave('reviews', bizData.id, { business: bizData as Business, reviews: revs })
+      }
 
       if (revs.length === 0) return
 
@@ -356,9 +380,13 @@ export default function Dashboard() {
       setTimeline(buildTimeline(mergedRevs))
       setKeywords(data.topKeywords ?? [])
 
-      // Refresh business row and update store
+      // Refresh business row and update store + localStorage
       const { data: refreshed } = await supabase.from('businesses').select('*').eq('id', businessId).single()
-      if (refreshed) setDashboard(refreshed as Business, mergedRevs, businessId)
+      if (refreshed) {
+        setDashboard(refreshed as Business, mergedRevs, businessId)
+        lcSave('reviews', businessId, { business: refreshed as Business, reviews: mergedRevs })
+        console.log('[Dashboard] ✅ Analysis complete — saved to localStorage')
+      }
 
     } catch (e: unknown) {
       console.error('[Dashboard] runAnalysis error:', e)
@@ -423,13 +451,21 @@ export default function Dashboard() {
   const loadCategories = async () => {
     if (!activeBusiness) return
 
-    // 1️⃣ Store hit
+    // 1️⃣ Zustand store hit
     if (categoriesBusinessId === activeBusiness.id && categoriesLoadedAt !== null && categories.length > 0) {
-      console.log('[Dashboard] ✅ Categories store hit')
+      console.log('[Dashboard] ✅ Categories Layer 1 hit — Zustand store')
       return
     }
 
-    // 2️⃣ Supabase
+    // 2️⃣ localStorage hit
+    const lsCats = lcLoad<Category[]>('categories', activeBusiness.id)
+    if (lsCats && lsCats.data.length > 0) {
+      console.log('[Dashboard] ✅ Categories Layer 2 hit — localStorage')
+      setCategories(lsCats.data, activeBusiness.id)
+      return
+    }
+
+    // 3️⃣ Supabase
     setCatError('')
     try {
       const { data, error: dbErr } = await supabase
@@ -439,7 +475,9 @@ export default function Dashboard() {
         .order('review_count', { ascending: false })
       if (dbErr) throw dbErr
       if (data && data.length > 0) {
+        console.log('[Dashboard] ✅ Categories Layer 3 hit — Supabase')
         setCategories(data as Category[], activeBusiness.id)
+        lcSave('categories', activeBusiness.id, data as Category[])
       }
     } catch (e: unknown) {
       console.error('[Dashboard] loadCategories error:', e)
@@ -460,7 +498,11 @@ export default function Dashboard() {
       if (!res.ok) throw new Error(payload.error ?? `API error ${res.status}`)
 
       const newCats: Category[] = payload.categories
+      // Clear old localStorage before saving fresh
+      lcClear('categories', activeBusiness.id)
       setCategories(newCats, activeBusiness.id)
+      lcSave('categories', activeBusiness.id, newCats)
+      console.log('[Dashboard] ✅ Categories saved to localStorage + Zustand')
 
       // Persist to Supabase — delete old, insert new
       await supabase.from('categories').delete().eq('business_id', activeBusiness.id)
