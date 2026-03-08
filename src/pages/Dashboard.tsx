@@ -1019,7 +1019,7 @@ export default function Dashboard() {
                     : 'bg-white/5 border-[#1e2d4a] hover:border-purple-500/30'
                 }`}
               >
-                <span className="text-lg">🗂</span>
+                <span className="text-lg">📋</span>
                 <span className="text-xs font-semibold text-gray-200 leading-tight">All Reviews</span>
                 <span className="text-[10px] text-gray-500">{reviews.length} total</span>
               </button>
