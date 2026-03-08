@@ -2,8 +2,6 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
-const REVIEWS_FETCH_LIMIT = 200 // Initial onboarding fetch — own business
-
 const BUSINESS_TYPES = ['Restaurant', 'Retail', 'Cafe', 'Salon', 'Bar', 'Other']
 
 // ── Steps ──────────────────────────────────────────────────────────────────
@@ -91,7 +89,7 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
     }
   }
 
-  // ── Step 4: confirm + fetch reviews ────────────────────────────────────
+  // ── Step 4: confirm — save business only (no Outscraper call here) ─────
 
   const handleConfirm = async () => {
     if (!searchResult) return
@@ -100,16 +98,15 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
     setFetchMsg('Creating your business profile…')
 
     try {
-      // 1. Insert business row
       const { data: biz, error: bizErr } = await supabase
         .from('businesses')
         .insert({
-          user_id:      user!.id,
-          name:         name.trim(),
+          user_id:       user!.id,
+          name:          name.trim(),
           type,
-          location:     location.trim(),
-          place_id:     searchResult.place_id,
-          full_address: searchResult.full_address,
+          location:      location.trim(),
+          place_id:      searchResult.place_id,
+          full_address:  searchResult.full_address,
           google_rating: searchResult.rating,
           total_reviews: searchResult.reviews_count ?? 0,
         })
@@ -117,48 +114,9 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
         .single()
       if (bizErr) throw new Error(`Database error: ${bizErr.message}`)
 
-      // 2. Fetch reviews from Outscraper
-      setFetchMsg('Fetching your reviews from Google… (this may take up to 2 minutes)')
-
-      const fetchRes = await fetch('/api/outscraper-reviews', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ place_id: searchResult.place_id, limit: REVIEWS_FETCH_LIMIT, sort: 'newest' }),
-      })
-      if (!fetchRes.ok) {
-        const d = await fetchRes.json().catch(() => ({}))
-        throw new Error(d.error ?? 'Failed to fetch reviews')
-      }
-      const { reviews } = await fetchRes.json()
-
-      // 3. Save reviews to Supabase
-      setFetchMsg(`Saving ${reviews.length} reviews to your dashboard…`)
-
-      if (reviews.length > 0) {
-        const rows = reviews.map((r: {
-          reviewer_name: string
-          review_text:   string
-          rating:        number | null
-          reviewed_at:   string | null
-        }) => ({
-          business_id:   biz!.id,
-          user_id:       user!.id,
-          review_text:   r.review_text,
-          reviewer_name: r.reviewer_name,
-          rating:        r.rating,
-          reviewed_at:   r.reviewed_at,
-          sentiment:     null,
-        }))
-        const { error: revErr } = await supabase.from('reviews').insert(rows)
-        if (revErr) throw new Error(`Reviews error: ${revErr.message}`)
-      }
-
-      // 4. Stamp reviews_fetched_at
-      await supabase
-        .from('businesses')
-        .update({ reviews_fetched_at: new Date().toISOString() })
-        .eq('id', biz!.id)
-
+      // Reviews are NOT fetched automatically — user clicks "Fetch Reviews"
+      // on the dashboard. This prevents unnecessary Outscraper charges.
+      void biz
       onComplete()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unexpected error'
@@ -410,7 +368,7 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
                     onClick={handleConfirm}
                     className="btn-primary px-8 py-2.5 text-sm flex items-center gap-2"
                   >
-                    Yes, fetch my reviews →
+                    Add this business →
                   </button>
                 )}
               </>

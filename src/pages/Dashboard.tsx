@@ -505,6 +505,11 @@ export default function Dashboard() {
   const fetchNewReviews = async () => {
     if (!business?.place_id || !user) return
 
+    if (typeof business.place_id !== 'string' || !business.place_id.startsWith('ChIJ')) {
+      setFetchError('Invalid business ID — cannot fetch reviews. Please re-add this business.')
+      return
+    }
+
     if (!isStale(business.reviews_fetched_at, 7)) {
       setFetchError('Reviews were fetched less than 7 days ago. Please wait before refreshing again.')
       return

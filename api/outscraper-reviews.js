@@ -25,6 +25,13 @@ export default async function handler(req, res) {
 
   if (!place_id) return res.status(400).json({ error: 'place_id is required.' });
 
+  // Guard: only valid Google Place IDs (always start with "ChIJ") reach Outscraper
+  if (typeof place_id !== 'string' || !place_id.startsWith('ChIJ')) {
+    console.error('[outscraper-reviews] BLOCKED — invalid place_id, not calling Outscraper:', place_id);
+    return res.status(400).json({ error: 'Invalid business ID — cannot fetch reviews.' });
+  }
+  console.log('[outscraper-reviews] OUTSCRAPER CALL ABOUT TO BE MADE — place_id:', place_id);
+
   const apiKey = process.env.OUTSCRAPER_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'OUTSCRAPER_API_KEY is not set.' });
 

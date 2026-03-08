@@ -169,14 +169,20 @@ export default function CompetitorSpy() {
           continue
         }
 
-        // 2. Fetch reviews for this competitor
-        setLoadingMsg(`Fetching reviews for "${searchData.name}"… (may take up to 2 min)`)
-        const revRes = await fetch('/api/outscraper-reviews', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ place_id: searchData.place_id, limit: COMPETITOR_REVIEWS_LIMIT, sort: 'newest' }),
-        })
-        const revData = revRes.ok ? await revRes.json() : { reviews: [] }
+        // 2. Fetch reviews for this competitor (only if we have a valid Google Place ID)
+        let revData: { reviews: { review_text: string }[] } = { reviews: [] }
+        if (typeof searchData.place_id === 'string' && searchData.place_id.startsWith('ChIJ')) {
+          setLoadingMsg(`Fetching reviews for "${searchData.name}"… (may take up to 2 min)`)
+          console.log('OUTSCRAPER CALL ABOUT TO BE MADE — place_id:', searchData.place_id)
+          const revRes = await fetch('/api/outscraper-reviews', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ place_id: searchData.place_id, limit: COMPETITOR_REVIEWS_LIMIT, sort: 'newest' }),
+          })
+          revData = revRes.ok ? await revRes.json() : { reviews: [] }
+        } else {
+          console.error('BLOCKED competitor review fetch — invalid place_id:', searchData.place_id)
+        }
         const fetchedReviews: string[] = (revData.reviews ?? []).map((r: { review_text: string }) => r.review_text)
 
         if (fetchedReviews.length > 0) {
