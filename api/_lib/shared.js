@@ -35,8 +35,9 @@ export function mapReview(r) {
 }
 
 export function extractReviews(dataArray) {
-  const flat = dataArray.flat();
-  if (flat.length === 0) { console.log('[extractReviews] dataArray is empty'); return []; }
+  // Outscraper occasionally includes URL strings or null entries — filter to objects only
+  const flat = dataArray.flat().filter(item => item !== null && typeof item === 'object');
+  if (flat.length === 0) { console.log('[extractReviews] dataArray is empty or all-non-object'); return []; }
 
   const first = flat[0];
 

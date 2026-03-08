@@ -131,8 +131,8 @@ async function runJob(place_id, limit, skip, sort, apiKey) {
  * Log raw response structure, extract reviews, and return them.
  */
 function extractAndLog(dataArray, limit, skip) {
-  const flat = dataArray.flat();
-  console.log(`[outscraper-reviews] (skip=${skip}) raw: ${dataArray.length} top-level, ${flat.length} after flat()`);
+  const flat = dataArray.flat().filter(item => item !== null && typeof item === 'object');
+  console.log(`[outscraper-reviews] (skip=${skip}) raw: ${dataArray.length} top-level, ${flat.length} after flat()+filter`);
 
   flat.forEach((item, i) => {
     if (Array.isArray(item?.reviews)) {
