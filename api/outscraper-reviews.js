@@ -3,19 +3,19 @@ import { extractReviews } from './_lib/shared.js';
 // Polls up to 5 × 10 s = 50 s — within Vercel Pro's 60 s maxDuration.
 // Set maxDuration = 60 in vercel.json for this function.
 
-const MAX_REVIEWS_FETCH     = 200; // First-time fetch — own business
-const MAX_REFRESH_FETCH     = 50;  // Weekly refresh — own business
-const MAX_COMPETITOR_FETCH  = 200; // Competitor reviews
+const REVIEWS_FETCH_LIMIT    = 200; // First-time fetch — own business
+const MAX_REFRESH_FETCH      = 50;  // Weekly refresh — own business (keep low to save costs)
+const COMPETITOR_REVIEWS_LIMIT = 200; // Reviews per competitor
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { place_id, limit: rawLimit = MAX_REVIEWS_FETCH, sort = 'newest' } = req.body;
+  const { place_id, limit: rawLimit = REVIEWS_FETCH_LIMIT, sort = 'newest' } = req.body;
 
-  // Enforce hard ceiling — caller cannot exceed MAX_REVIEWS_FETCH
-  const limit = Math.min(Number(rawLimit) || MAX_REVIEWS_FETCH, MAX_REVIEWS_FETCH);
+  // Enforce hard ceiling — caller cannot exceed REVIEWS_FETCH_LIMIT
+  const limit = Math.min(Number(rawLimit) || REVIEWS_FETCH_LIMIT, REVIEWS_FETCH_LIMIT);
   console.log(`[outscraper-reviews] place_id: ${place_id}, limit: ${limit}, sort: ${sort}`);
 
   if (!place_id) return res.status(400).json({ error: 'place_id is required.' });

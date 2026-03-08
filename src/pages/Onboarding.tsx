@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
+const REVIEWS_FETCH_LIMIT = 200 // Initial onboarding fetch — own business
+
 const BUSINESS_TYPES = ['Restaurant', 'Retail', 'Cafe', 'Salon', 'Bar', 'Other']
 
 // ── Steps ──────────────────────────────────────────────────────────────────
@@ -60,10 +62,6 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
     setSearchResult(null)
     setStep(s => s - 1)
   }
-
-  // ── Outscraper limits ───────────────────────────────────────────────────
-
-  const MAX_REVIEWS_FETCH = 200 // Initial onboarding fetch
 
   // ── Step 3: search Google Maps via Outscraper ───────────────────────────
 
@@ -125,7 +123,7 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
       const fetchRes = await fetch('/api/outscraper-reviews', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ place_id: searchResult.place_id, limit: MAX_REVIEWS_FETCH, sort: 'newest' }),
+        body:    JSON.stringify({ place_id: searchResult.place_id, limit: REVIEWS_FETCH_LIMIT, sort: 'newest' }),
       })
       if (!fetchRes.ok) {
         const d = await fetchRes.json().catch(() => ({}))

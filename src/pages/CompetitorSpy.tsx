@@ -9,7 +9,7 @@ import { useAppStore } from '../store/appStore'
 
 // ── Outscraper limits ──────────────────────────────────────────────────────
 
-const MAX_COMPETITOR_FETCH = 200 // Reviews per competitor
+const COMPETITOR_REVIEWS_LIMIT = 200 // Reviews per competitor
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -174,7 +174,7 @@ export default function CompetitorSpy() {
         const revRes = await fetch('/api/outscraper-reviews', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ place_id: searchData.place_id, limit: MAX_COMPETITOR_FETCH, sort: 'newest' }),
+          body:    JSON.stringify({ place_id: searchData.place_id, limit: COMPETITOR_REVIEWS_LIMIT, sort: 'newest' }),
         })
         const revData = revRes.ok ? await revRes.json() : { reviews: [] }
         const fetchedReviews: string[] = (revData.reviews ?? []).map((r: { review_text: string }) => r.review_text)

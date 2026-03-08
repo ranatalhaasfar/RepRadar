@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import type { Business } from '../lib/supabase'
 
+const REVIEWS_FETCH_LIMIT = 200 // Initial fetch — own business
+
 const BUSINESS_TYPES = ['Restaurant', 'Retail', 'Cafe', 'Salon', 'Bar', 'Other']
 
 // ── Steps ──────────────────────────────────────────────────────────────────
@@ -68,10 +70,6 @@ export default function AddBusiness({
     setStep(s => s - 1)
   }
 
-  // ── Outscraper limits ───────────────────────────────────────────────────
-
-  const MAX_REVIEWS_FETCH = 200
-
   // ── Step 3: search Google Maps via Outscraper ───────────────────────────
 
   const searchBusiness = async () => {
@@ -132,7 +130,7 @@ export default function AddBusiness({
       const fetchRes = await fetch('/api/outscraper-reviews', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ place_id: searchResult.place_id, limit: MAX_REVIEWS_FETCH, sort: 'newest' }),
+        body:    JSON.stringify({ place_id: searchResult.place_id, limit: REVIEWS_FETCH_LIMIT, sort: 'newest' }),
       })
       if (!fetchRes.ok) {
         const d = await fetchRes.json().catch(() => ({}))
