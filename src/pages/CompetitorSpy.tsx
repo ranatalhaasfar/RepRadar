@@ -291,20 +291,20 @@ export default function CompetitorSpy() {
     <div className="space-y-6">
 
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-gray-100">Competitor Spy</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-100">Competitor Spy</h1>
           <p className="text-gray-500 text-sm mt-1">
             Fetch real Google reviews from competitors and compare with AI.
           </p>
         </div>
-        <span className="badge bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs px-3 py-1">
+        <span className="badge bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs px-3 py-1 self-start">
           🌐 Live Data
         </span>
       </div>
 
       {/* Input card */}
-      <div className="card p-6">
+      <div className="card p-4 sm:p-6">
         <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-4">
           Enter Competitor Names
         </p>
@@ -335,7 +335,7 @@ export default function CompetitorSpy() {
         <button
           onClick={runSpy}
           disabled={isLoading}
-          className="btn-primary px-6 py-2.5 text-sm flex items-center gap-2"
+          className="btn-primary w-full sm:w-auto px-6 py-2.5 min-h-[44px] text-sm flex items-center justify-center gap-2"
         >
           {isLoading ? (
             <><SpinnerIcon /> Fetching reviews…</>
@@ -353,7 +353,7 @@ export default function CompetitorSpy() {
         <>
           {/* Chart */}
           {chartData.length > 1 && (
-            <div className="card p-6">
+            <div className="card p-4 sm:p-6">
               <h3 className="text-sm font-semibold text-gray-200 mb-1">Rating Comparison</h3>
               <p className="text-xs text-gray-500 mb-4">Google average rating vs. competitors</p>
               <ResponsiveContainer width="100%" height={220}>
@@ -374,7 +374,7 @@ export default function CompetitorSpy() {
 
           {/* AI Comparison */}
           {comparison && (
-            <div className="card p-6 border-purple-500/20 space-y-4">
+            <div className="card p-4 sm:p-6 border-purple-500/20 space-y-4">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xl">🤖</span>
                 <h3 className="text-sm font-semibold text-gray-200">AI Competitive Analysis</h3>
@@ -411,7 +411,7 @@ export default function CompetitorSpy() {
 
           {/* Comparison table */}
           <div className="card overflow-hidden">
-            <div className="px-6 py-4 border-b border-[#1e2d4a]">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-[#1e2d4a]">
               <h3 className="text-sm font-semibold text-gray-200">Detailed Comparison</h3>
             </div>
             <div className="overflow-x-auto">
@@ -419,7 +419,7 @@ export default function CompetitorSpy() {
                 <thead>
                   <tr className="border-b border-[#1e2d4a]">
                     {['Business', 'Google Rating', 'Total Reviews', 'Address'].map(h => (
-                      <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th key={h} className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         {h}
                       </th>
                     ))}
@@ -428,26 +428,26 @@ export default function CompetitorSpy() {
                 <tbody className="divide-y divide-[#1e2d4a]">
                   {business && (
                     <tr className="bg-purple-500/5">
-                      <td className="px-6 py-4">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
                           <span className="text-sm font-semibold text-purple-300">{business.name}</span>
                           <span className="badge bg-purple-500/20 text-purple-400 border border-purple-500/30">You</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 min-w-[140px]">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 min-w-[120px]">
                         {business.google_rating
                           ? <StarBar rating={business.google_rating} />
                           : <span className="text-xs text-gray-600">Not available</span>
                         }
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-300">{business.total_reviews.toLocaleString()}</td>
-                      <td className="px-6 py-4 text-xs text-gray-500">{business.location}</td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-300">{business.total_reviews.toLocaleString()}</td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs text-gray-500">{business.location}</td>
                     </tr>
                   )}
                   {competitors.map((c, i) => (
                     <tr key={i} className="hover:bg-white/[0.02] transition-colors">
-                      <td className="px-6 py-4">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-blue-500 opacity-70 shrink-0" />
                           <div className="min-w-0">
@@ -455,16 +455,16 @@ export default function CompetitorSpy() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 min-w-[140px]">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 min-w-[120px]">
                         {c.google_rating !== null
                           ? <StarBar rating={c.google_rating} />
                           : <span className="text-xs text-gray-600">Not found</span>
                         }
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-400">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-400">
                         {c.total_reviews !== null ? c.total_reviews.toLocaleString() : '—'}
                       </td>
-                      <td className="px-6 py-4 text-xs text-gray-500 max-w-[200px] truncate">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs text-gray-500 max-w-[200px] truncate">
                         {c.full_address ?? c.location ?? '—'}
                       </td>
                     </tr>

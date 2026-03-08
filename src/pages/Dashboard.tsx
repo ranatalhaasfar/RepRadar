@@ -49,15 +49,15 @@ function ReputationGauge({ score }: { score: number }) {
 
   return (
     <div className="flex flex-col items-center justify-center h-full">
-      <svg width="160" height="160" viewBox="0 0 160 160" className="-rotate-[135deg]">
+      <svg width="140" height="140" viewBox="0 0 160 160" className="-rotate-[135deg] w-32 h-32 sm:w-40 sm:h-40">
         <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1e2d4a" strokeWidth="12"
           strokeDasharray={`${arc} ${circumference - arc}`} strokeLinecap="round" />
         <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth="12"
           strokeDasharray={`${arc - offset} ${circumference}`} strokeLinecap="round"
           className="transition-all duration-1000" />
       </svg>
-      <div className="-mt-12 text-center">
-        <p className="text-4xl font-bold text-gray-100">{score}</p>
+      <div className="-mt-10 sm:-mt-12 text-center">
+        <p className="text-3xl sm:text-4xl font-bold text-gray-100">{score}</p>
         <p className="text-xs text-gray-500">/ 100</p>
         <p className="text-[11px] text-gray-500 mt-1">Reputation Score</p>
       </div>
@@ -379,9 +379,9 @@ export default function Dashboard() {
     <div className="space-y-6">
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-100">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-100">
             {business?.name ?? 'Dashboard'}
           </h1>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
@@ -409,13 +409,13 @@ export default function Dashboard() {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
           {business?.place_id && (
             <button
               onClick={fetchNewReviews}
               disabled={fetchingReviews || analysisLoading}
               title="Fetch latest reviews from Google"
-              className="px-3 py-2 text-xs text-blue-400 border border-blue-500/30 hover:bg-blue-500/10 rounded-lg transition-all disabled:opacity-40 flex items-center gap-1.5"
+              className="min-h-[44px] px-3 py-2 text-xs text-blue-400 border border-blue-500/30 hover:bg-blue-500/10 rounded-lg transition-all disabled:opacity-40 flex items-center gap-1.5"
             >
               {fetchingReviews ? (
                 <>
@@ -433,7 +433,7 @@ export default function Dashboard() {
               onClick={() => loadData(true)}
               disabled={analysisLoading || fetchingReviews}
               title="Force re-analysis with Anthropic AI"
-              className="px-3 py-2 text-xs text-purple-400 border border-purple-500/30 hover:bg-purple-500/10 rounded-lg transition-all disabled:opacity-40"
+              className="min-h-[44px] px-3 py-2 text-xs text-purple-400 border border-purple-500/30 hover:bg-purple-500/10 rounded-lg transition-all disabled:opacity-40"
             >
               ✨ Re-analyze
             </button>
@@ -441,7 +441,7 @@ export default function Dashboard() {
           <button
             onClick={() => loadData(false)}
             disabled={loading || analysisLoading || fetchingReviews}
-            className="btn-primary px-4 py-2 text-xs flex items-center gap-1.5"
+            className="btn-primary min-h-[44px] px-4 py-2 text-xs flex items-center gap-1.5"
           >
             ↻ Refresh
           </button>
@@ -485,7 +485,7 @@ export default function Dashboard() {
       )}
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <StatCard icon="📝" value={reviews.length}
           label="Total Reviews"
           sub={business?.google_rating ? `${business.google_rating.toFixed(1)}★ Google rating` : undefined}
@@ -557,7 +557,7 @@ export default function Dashboard() {
           </div>
           <div className="divide-y divide-[#1e2d4a]">
             {[...reviews].reverse().slice(0, 5).map(r => (
-              <div key={r.id} className="px-6 py-4 flex items-start gap-4">
+              <div key={r.id} className="px-4 sm:px-6 py-3 sm:py-4 flex items-start gap-3">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                   {r.reviewer_name[0].toUpperCase()}
                 </div>

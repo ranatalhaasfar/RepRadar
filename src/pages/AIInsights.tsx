@@ -262,11 +262,11 @@ export default function AIInsights() {
     <div className="space-y-6">
 
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-100">AI Insights</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-100">AI Insights</h1>
           {analyzedAt ? (
-            <p className="text-gray-500 text-sm mt-1 flex items-center gap-2">
+            <p className="text-gray-500 text-sm mt-1 flex items-center gap-2 flex-wrap">
               {fromCache && <span className="text-emerald-600 text-xs">✓ Loaded from cache ·</span>}
               Last updated: {formatAnalyzedAt(analyzedAt)}
             </p>
@@ -279,7 +279,7 @@ export default function AIInsights() {
         <button
           onClick={refreshInsights}
           disabled={refreshing}
-          className="btn-primary px-4 py-2 text-xs flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="btn-primary w-full sm:w-auto px-4 py-2 min-h-[44px] text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {refreshing ? (
             <>
@@ -335,12 +335,12 @@ export default function AIInsights() {
           </div>
 
           {/* Filter tabs */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
             {(['All', 'High', 'Medium', 'Low'] as const).map(f => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+                className={`px-3 py-1.5 min-h-[36px] text-xs font-medium rounded-lg border transition-all whitespace-nowrap ${
                   filter === f
                     ? 'bg-purple-500/20 border-purple-500/40 text-purple-300'
                     : 'bg-transparent border-[#1e2d4a] text-gray-500 hover:border-purple-500/30 hover:text-gray-300'

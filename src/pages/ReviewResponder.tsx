@@ -101,18 +101,18 @@ export default function ReviewResponder() {
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="w-full max-w-2xl space-y-5 sm:space-y-6">
 
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-100">Review Responder</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-100">Review Responder</h1>
         <p className="text-gray-500 text-sm mt-1">
           Paste any customer review and generate a perfect AI response instantly.
         </p>
       </div>
 
       {/* Card */}
-      <div className="card p-6 space-y-6">
+      <div className="card p-4 sm:p-6 space-y-5 sm:space-y-6">
 
         {/* Review input */}
         <div>
@@ -137,12 +137,12 @@ export default function ReviewResponder() {
           <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
             Response Tone
           </label>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
             {TONE_OPTIONS.map(opt => (
               <button
                 key={opt.value}
                 onClick={() => setTone(opt.value)}
-                className={`relative flex flex-col items-center gap-1.5 p-4 rounded-xl border-2 transition-all duration-150 text-center ${
+                className={`relative flex flex-col items-center gap-1 sm:gap-1.5 p-3 sm:p-4 min-h-[80px] rounded-xl border-2 transition-all duration-150 text-center ${
                   tone === opt.value
                     ? 'border-purple-500 bg-purple-500/10'
                     : 'border-[#1e2d4a] bg-[#080d1a] hover:border-purple-500/40'
@@ -178,7 +178,7 @@ export default function ReviewResponder() {
         <button
           onClick={generateResponse}
           disabled={isLoading}
-          className="btn-primary w-full py-3.5 flex items-center justify-center gap-2 text-sm"
+          className="btn-primary w-full py-3.5 min-h-[52px] flex items-center justify-center gap-2 text-sm"
         >
           {isLoading
             ? <><SpinnerIcon className="h-4 w-4" /><span>Generating response…</span></>

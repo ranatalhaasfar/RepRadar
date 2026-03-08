@@ -25,10 +25,10 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard',   label: 'Dashboard',       icon: '📊' },
-  { id: 'responder',   label: 'Review Responder', icon: '✍️',  badge: undefined },
-  { id: 'competitors', label: 'Competitor Spy',   icon: '🔍' },
-  { id: 'insights',    label: 'AI Insights',      icon: '🧠',  badge: 'AI' },
-  { id: 'alerts',      label: 'Alert Settings',   icon: '🔔' },
+  { id: 'responder',   label: 'Responder',        icon: '✍️' },
+  { id: 'competitors', label: 'Competitors',      icon: '🔍' },
+  { id: 'insights',    label: 'AI Insights',      icon: '🧠', badge: 'AI' },
+  { id: 'alerts',      label: 'Alerts',           icon: '🔔' },
 ]
 
 const PAGE_TITLES: Record<Page, string> = {
@@ -41,27 +41,47 @@ const PAGE_TITLES: Record<Page, string> = {
 
 // ── Sidebar ────────────────────────────────────────────────────────────────
 
-function Sidebar({ active, onNavigate, businessName, userEmail, onSignOut }: {
+function Sidebar({ active, onNavigate, businessName, userEmail, onSignOut, onClose }: {
   active: Page
   onNavigate: (p: Page) => void
   businessName: string
   userEmail: string
   onSignOut: () => void
+  onClose?: () => void
 }) {
+  const handleNav = (p: Page) => {
+    onNavigate(p)
+    onClose?.()
+  }
+
   return (
-    <aside className="fixed inset-y-0 left-0 w-60 bg-[#0a1020] border-r border-[#1e2d4a] flex flex-col z-30">
+    <aside className="flex flex-col h-full bg-[#0a1020] border-r border-[#1e2d4a]">
 
       {/* Logo */}
-      <div className="px-6 py-6 border-b border-[#1e2d4a]">
-        <div className="flex items-center gap-2.5 mb-1">
-          <span className="text-2xl">📡</span>
-          <span className="text-xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent tracking-tight">
-            RepRadar
-          </span>
+      <div className="px-6 py-5 border-b border-[#1e2d4a] flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2.5 mb-1">
+            <span className="text-2xl">📡</span>
+            <span className="text-xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent tracking-tight">
+              RepRadar
+            </span>
+          </div>
+          <p className="text-[10px] text-gray-600 leading-tight pl-0.5">
+            Your Reputation. Monitored.<br />Analyzed. Protected.
+          </p>
         </div>
-        <p className="text-[10px] text-gray-600 leading-tight pl-0.5">
-          Your Reputation. Monitored.<br />Analyzed. Protected.
-        </p>
+        {/* Close button — mobile only */}
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="lg:hidden p-2 text-gray-500 hover:text-gray-200 hover:bg-white/5 rounded-lg transition-colors"
+            aria-label="Close menu"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Nav */}
@@ -71,8 +91,8 @@ function Sidebar({ active, onNavigate, businessName, userEmail, onSignOut }: {
           return (
             <button
               key={item.id}
-              onClick={() => onNavigate(item.id)}
-              className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group ${
+              onClick={() => handleNav(item.id)}
+              className={`w-full flex items-center justify-between gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-all duration-150 group ${
                 isActive
                   ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30'
                   : 'text-gray-500 hover:text-gray-200 hover:bg-white/5 border border-transparent'
@@ -97,7 +117,6 @@ function Sidebar({ active, onNavigate, businessName, userEmail, onSignOut }: {
 
       {/* Footer */}
       <div className="px-4 py-4 border-t border-[#1e2d4a]">
-        {/* User row */}
         <div className="flex items-center gap-2.5 mb-3">
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
             {(businessName || userEmail)[0]?.toUpperCase() ?? 'U'}
@@ -107,10 +126,9 @@ function Sidebar({ active, onNavigate, businessName, userEmail, onSignOut }: {
             <p className="text-[10px] text-gray-600 truncate">{userEmail}</p>
           </div>
         </div>
-        {/* Sign out */}
         <button
           onClick={onSignOut}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all border border-transparent hover:border-red-500/20"
+          className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all border border-transparent hover:border-red-500/20 min-h-[44px]"
         >
           <span>🚪</span>
           <span>Sign Out</span>
@@ -122,13 +140,25 @@ function Sidebar({ active, onNavigate, businessName, userEmail, onSignOut }: {
 
 // ── TopBar ─────────────────────────────────────────────────────────────────
 
-function TopBar({ page }: { page: Page }) {
+function TopBar({ page, onMenuOpen }: { page: Page; onMenuOpen: () => void }) {
   const now = new Date()
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
   return (
-    <header className="h-14 bg-[#0a1020]/80 backdrop-blur border-b border-[#1e2d4a] flex items-center justify-between px-6 sticky top-0 z-20">
-      <h2 className="text-sm font-semibold text-gray-200">{PAGE_TITLES[page]}</h2>
+    <header className="h-14 bg-[#0a1020]/80 backdrop-blur border-b border-[#1e2d4a] flex items-center justify-between px-4 sticky top-0 z-20">
+      <div className="flex items-center gap-3">
+        {/* Hamburger — mobile only */}
+        <button
+          onClick={onMenuOpen}
+          className="lg:hidden p-2 text-gray-400 hover:text-gray-200 hover:bg-white/5 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+          aria-label="Open menu"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <h2 className="text-sm font-semibold text-gray-200">{PAGE_TITLES[page]}</h2>
+      </div>
       <div className="flex items-center gap-4">
         <span className="text-xs text-gray-600 hidden sm:block">{dateStr}</span>
         <div className="flex items-center gap-1.5">
@@ -140,6 +170,38 @@ function TopBar({ page }: { page: Page }) {
   )
 }
 
+// ── BottomNav — mobile only ────────────────────────────────────────────────
+
+function BottomNav({ active, onNavigate }: { active: Page; onNavigate: (p: Page) => void }) {
+  return (
+    <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-[#0a1020] border-t border-[#1e2d4a] z-30 flex">
+      {NAV_ITEMS.map(item => {
+        const isActive = active === item.id
+        return (
+          <button
+            key={item.id}
+            onClick={() => onNavigate(item.id)}
+            className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 min-h-[56px] transition-colors relative ${
+              isActive ? 'text-purple-400' : 'text-gray-600 hover:text-gray-400'
+            }`}
+          >
+            {isActive && (
+              <span className="absolute top-0 inset-x-0 h-0.5 bg-purple-500 rounded-b" />
+            )}
+            <span className="text-xl leading-none">{item.icon}</span>
+            <span className="text-[10px] font-medium leading-none">{item.label}</span>
+            {item.badge && (
+              <span className="absolute top-1.5 right-1/2 translate-x-3 text-[8px] font-bold px-1 py-px rounded-full bg-purple-500/40 text-purple-300">
+                {item.badge}
+              </span>
+            )}
+          </button>
+        )
+      })}
+    </nav>
+  )
+}
+
 // ── Inner app (authenticated) ──────────────────────────────────────────────
 
 function AuthenticatedApp() {
@@ -147,10 +209,10 @@ function AuthenticatedApp() {
   const [page, setPage]               = useState<Page>('dashboard')
   const [hasOnboarded, setHasOnboarded] = useState<boolean | null>(null)
   const [businessName, setBusinessName] = useState('')
+  const [sidebarOpen, setSidebarOpen]   = useState(false)
 
   useEffect(() => {
     if (!user) return
-    // Check if the user has completed onboarding (has a business row)
     supabase
       .from('businesses')
       .select('id, name')
@@ -164,7 +226,6 @@ function AuthenticatedApp() {
   }, [user])
 
   const handleOnboardingComplete = async () => {
-    // Refresh business name
     const { data } = await supabase
       .from('businesses')
       .select('name')
@@ -175,7 +236,6 @@ function AuthenticatedApp() {
     setHasOnboarded(true)
   }
 
-  // Loading state while we check for onboarding status
   if (hasOnboarded === null) {
     return (
       <div className="min-h-screen bg-[#080d1a] flex items-center justify-center">
@@ -187,28 +247,54 @@ function AuthenticatedApp() {
     )
   }
 
-  // Onboarding
   if (!hasOnboarded) {
     return <Onboarding onComplete={handleOnboardingComplete} />
   }
 
   return (
     <div className="min-h-screen bg-[#080d1a]">
-      <Sidebar
-        active={page}
-        onNavigate={setPage}
-        businessName={businessName}
-        userEmail={user?.email ?? ''}
-        onSignOut={signOut}
-      />
-      <div className="ml-60 flex flex-col min-h-screen">
-        <TopBar page={page} />
+
+      {/* ── Desktop sidebar (always visible on lg+) ── */}
+      <div className="hidden lg:block fixed inset-y-0 left-0 w-60 z-30">
+        <Sidebar
+          active={page}
+          onNavigate={setPage}
+          businessName={businessName}
+          userEmail={user?.email ?? ''}
+          onSignOut={signOut}
+        />
+      </div>
+
+      {/* ── Mobile overlay sidebar ── */}
+      {sidebarOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="lg:hidden fixed inset-0 bg-black/60 z-40 backdrop-blur-sm"
+            onClick={() => setSidebarOpen(false)}
+          />
+          {/* Drawer */}
+          <div className="lg:hidden fixed inset-y-0 left-0 w-72 z-50">
+            <Sidebar
+              active={page}
+              onNavigate={setPage}
+              businessName={businessName}
+              userEmail={user?.email ?? ''}
+              onSignOut={signOut}
+              onClose={() => setSidebarOpen(false)}
+            />
+          </div>
+        </>
+      )}
+
+      {/* ── Main content ── */}
+      <div className="lg:ml-60 flex flex-col min-h-screen">
+        <TopBar page={page} onMenuOpen={() => setSidebarOpen(true)} />
         {/*
           Pages are always mounted — never unmounted on tab switch.
-          This prevents useEffect from re-firing and re-calling Anthropic on every visit.
-          CSS hidden keeps non-active pages invisible but preserves their state.
+          CSS hidden keeps non-active pages invisible but preserves state/avoids Anthropic re-calls.
         */}
-        <main className="flex-1 p-6 overflow-auto">
+        <main className="flex-1 p-4 md:p-6 overflow-auto pb-20 lg:pb-6">
           <div className={page === 'dashboard'   ? '' : 'hidden'}><Dashboard /></div>
           <div className={page === 'responder'   ? '' : 'hidden'}><ReviewResponder /></div>
           <div className={page === 'competitors' ? '' : 'hidden'}><CompetitorSpy /></div>
@@ -216,6 +302,9 @@ function AuthenticatedApp() {
           <div className={page === 'alerts'      ? '' : 'hidden'}><AlertSettings /></div>
         </main>
       </div>
+
+      {/* ── Mobile bottom nav ── */}
+      <BottomNav active={page} onNavigate={setPage} />
     </div>
   )
 }

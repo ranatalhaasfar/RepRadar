@@ -36,10 +36,10 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="card overflow-hidden">
-      <div className="px-6 py-4 border-b border-[#1e2d4a]">
+      <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-[#1e2d4a]">
         <h3 className="text-sm font-semibold text-gray-200">{title}</h3>
       </div>
-      <div className="p-6">{children}</div>
+      <div className="p-4 sm:p-6">{children}</div>
     </div>
   )
 }
@@ -80,7 +80,7 @@ export default function AlertSettings() {
 
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-100">Alert Settings</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-100">Alert Settings</h1>
         <p className="text-gray-500 text-sm mt-1">
           Configure how and when RepRadar notifies you about your reputation.
         </p>
@@ -169,7 +169,7 @@ export default function AlertSettings() {
             Set the maximum frequency for non-critical alerts to avoid notification fatigue.
           </p>
           {(['Immediately', 'Every hour', 'Daily digest', 'Weekly only'] as const).map(freq => (
-            <label key={freq} className="flex items-center gap-3 cursor-pointer group">
+            <label key={freq} className="flex items-center gap-3 cursor-pointer group min-h-[36px]">
               <input
                 type="radio"
                 name="frequency"
@@ -185,10 +185,10 @@ export default function AlertSettings() {
       </Section>
 
       {/* Save */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
         <button
           onClick={save}
-          className="btn-primary px-8 py-3 text-sm"
+          className="btn-primary w-full sm:w-auto px-8 py-3 min-h-[44px] text-sm"
         >
           Save Settings
         </button>
