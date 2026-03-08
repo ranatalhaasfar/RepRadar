@@ -140,6 +140,7 @@ function extractAndLog(dataArray, limit, skip) {
     } else {
       const reviewKey = Object.keys(item ?? {}).find(k =>
         Array.isArray(item[k]) && item[k][0] &&
+        typeof item[k][0] === 'object' &&
         ('review_text' in item[k][0] || 'text' in item[k][0])
       );
       if (reviewKey) {
