@@ -1,0 +1,10 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/outscraper-search.js":  { "maxDuration": 60 },
+    "api/outscraper-reviews.js": { "maxDuration": 60 },
+    "api/analyze-reviews.js":    { "maxDuration": 30 },
+    "api/generate-insights.js":  { "maxDuration": 30 }
+  }
+}

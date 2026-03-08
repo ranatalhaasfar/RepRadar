@@ -1,0 +1,82 @@
+import Anthropic from '@anthropic-ai/sdk';
+
+// ── Lazy Anthropic client ──────────────────────────────────────────────────
+
+let _client = null;
+export function getClient() {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY is not set');
+  }
+  if (!_client) {
+    _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  }
+  return _client;
+}
+
+// ── Tone descriptions ──────────────────────────────────────────────────────
+
+export const TONE_DESCRIPTIONS = {
+  Friendly:     'warm, personable, and enthusiastic with a conversational tone that makes customers feel appreciated',
+  Professional: 'polished, formal, and business-appropriate — respectful and composed',
+  Apologetic:   "empathetic, sincere, and focused on understanding the customer's experience and making things right",
+};
+
+// ── Review extraction helpers ──────────────────────────────────────────────
+
+export function mapReview(r) {
+  return {
+    reviewer_name: r.author_title ?? r.reviewer_name ?? r.name ?? 'Anonymous',
+    review_text:   r.review_text ?? r.text ?? r.snippet ?? '',
+    rating:        typeof r.review_rating === 'number' ? r.review_rating
+                 : typeof r.rating === 'number'        ? r.rating
+                 : null,
+    reviewed_at:   r.review_datetime_utc ?? r.review_timestamp ?? r.date ?? null,
+  };
+}
+
+export function extractReviews(dataArray) {
+  const flat = dataArray.flat();
+  if (flat.length === 0) { console.log('[extractReviews] dataArray is empty'); return []; }
+
+  const first = flat[0];
+
+  // Case 1: each item IS a review (has review_text directly)
+  if (typeof first.review_text === 'string' || typeof first.text === 'string') {
+    console.log(`[extractReviews] Case 1 — flat reviews, ${flat.length} items`);
+    return flat.map(mapReview).filter(r => r.review_text.trim().length > 0);
+  }
+
+  // Case 2: each item is a place with a .reviews array
+  if (Array.isArray(first.reviews)) {
+    const all = flat.flatMap(place => place.reviews.map(mapReview))
+      .filter(r => r.review_text.trim().length > 0);
+    console.log(`[extractReviews] Case 2 — nested .reviews[], ${all.length} reviews`);
+    return all;
+  }
+
+  // Case 3: data is [[place, review, review, ...]]
+  const inner = dataArray[0];
+  if (Array.isArray(inner)) {
+    const reviewItems = inner.filter(item => typeof item.review_text === 'string' || typeof item.text === 'string');
+    if (reviewItems.length > 0) {
+      console.log(`[extractReviews] Case 3 — inner array with ${reviewItems.length} review items`);
+      return reviewItems.map(mapReview).filter(r => r.review_text.trim().length > 0);
+    }
+  }
+
+  // Case 4: scan all keys for arrays containing review-like objects
+  const reviewKey = Object.keys(first).find(k =>
+    Array.isArray(first[k]) && first[k].length > 0 &&
+    typeof first[k][0] === 'object' && first[k][0] !== null &&
+    ('review_text' in first[k][0] || 'text' in first[k][0] || 'author_title' in first[k][0])
+  );
+  if (reviewKey) {
+    const all = flat.flatMap(place => (Array.isArray(place[reviewKey]) ? place[reviewKey] : []).map(mapReview))
+      .filter(r => r.review_text.trim().length > 0);
+    console.log(`[extractReviews] Case 4 — reviews at key "${reviewKey}", ${all.length} reviews`);
+    return all;
+  }
+
+  console.log('[extractReviews] Could not find reviews. Keys on first item:', Object.keys(first).join(', '));
+  return [];
+}
