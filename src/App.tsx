@@ -59,6 +59,7 @@ function Sidebar({
   activeBusiness,
   onSwitchBusiness,
   onAddBusiness,
+  onDeleteBusiness,
   userEmail,
   userIsAdmin,
   onSignOut,
@@ -70,6 +71,7 @@ function Sidebar({
   activeBusiness: Business | null
   onSwitchBusiness: (biz: Business) => void
   onAddBusiness: () => void
+  onDeleteBusiness: (biz: Business) => void
   userEmail: string
   userIsAdmin: boolean
   onSignOut: () => void
@@ -177,21 +179,36 @@ function Sidebar({
         {switcherOpen && (
           <div className="mb-2 bg-[#080d1a] border border-[#1e2d4a] rounded-xl overflow-hidden">
             {allBusinesses.map(biz => (
-              <button
+              <div
                 key={biz.id}
-                onClick={() => { onSwitchBusiness(biz); setSwitcherOpen(false); onClose?.() }}
-                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors ${
+                className={`group flex items-center gap-2.5 px-3 py-2.5 transition-colors ${
                   biz.id === activeBusiness?.id
                     ? 'bg-purple-600/15 text-purple-300'
                     : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
                 }`}
               >
-                <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center text-white text-[9px] font-bold shrink-0">
-                  {biz.name[0]?.toUpperCase() ?? 'B'}
-                </div>
-                <span className="text-xs truncate flex-1">{biz.name}</span>
-                {biz.id === activeBusiness?.id && <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />}
-              </button>
+                <button
+                  onClick={() => { onSwitchBusiness(biz); setSwitcherOpen(false); onClose?.() }}
+                  className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
+                >
+                  <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center text-white text-[9px] font-bold shrink-0">
+                    {biz.name[0]?.toUpperCase() ?? 'B'}
+                  </div>
+                  <span className="text-xs truncate flex-1">{biz.name}</span>
+                  {biz.id === activeBusiness?.id && <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />}
+                </button>
+                {allBusinesses.length > 1 && (
+                  <button
+                    onClick={e => { e.stopPropagation(); onDeleteBusiness(biz) }}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0"
+                    title="Delete business"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             ))}
             <button
               onClick={() => { setSwitcherOpen(false); onClose?.(); onAddBusiness() }}
@@ -297,6 +314,9 @@ function AuthenticatedApp() {
   const [addingBusiness, setAddingBusiness]   = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [sidebarOpen, setSidebarOpen]   = useState(false)
+  const [bizToDelete, setBizToDelete]   = useState<Business | null>(null)
+  const [deleting, setDeleting]         = useState(false)
+  const [toast, setToast]               = useState<string | null>(null)
 
   // ── Load all businesses on mount ─────────────────────────────────────────
 
@@ -370,6 +390,42 @@ function AuthenticatedApp() {
     }
   }
 
+  const confirmDeleteBusiness = async () => {
+    if (!bizToDelete) return
+    setDeleting(true)
+    try {
+      const id = bizToDelete.id
+      await supabase.from('reviews').delete().eq('business_id', id)
+      await supabase.from('insights').delete().eq('business_id', id)
+      await supabase.from('competitors').delete().eq('business_id', id)
+      await supabase.from('categories').delete().eq('business_id', id)
+      await supabase.from('product_insights').delete().eq('business_id', id)
+      await supabase.from('businesses').delete().eq('id', id)
+
+      // Clear localStorage for this business
+      const namespaces = ['dashboard', 'reviews', 'insights', 'competitors', 'categories']
+      namespaces.forEach(ns => {
+        try { localStorage.removeItem(`repradar_${ns}_${id}`) } catch {}
+      })
+
+      // Reload business list and switch
+      const { data } = await supabase
+        .from('businesses').select('*')
+        .eq('user_id', user!.id)
+        .order('created_at', { ascending: true })
+      const list: Business[] = (data ?? []) as Business[]
+      clearAll()
+      setAllBusinesses(list)
+      if (list.length > 0) setActiveBusiness(list[0])
+      setHasOnboarded(list.length > 0)
+      setBizToDelete(null)
+      setToast('Business deleted successfully')
+      setTimeout(() => setToast(null), 3500)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   // ── Loading state ─────────────────────────────────────────────────────────
 
   if (hasOnboarded === null) {
@@ -417,6 +473,7 @@ function AuthenticatedApp() {
           activeBusiness={activeBusiness}
           onSwitchBusiness={handleSwitchBusiness}
           onAddBusiness={handleAddBusinessClick}
+          onDeleteBusiness={setBizToDelete}
           userEmail={user?.email ?? ''}
           userIsAdmin={isAdmin(user?.email)}
           onSignOut={handleSignOut}
@@ -440,6 +497,7 @@ function AuthenticatedApp() {
               activeBusiness={activeBusiness}
               onSwitchBusiness={handleSwitchBusiness}
               onAddBusiness={handleAddBusinessClick}
+              onDeleteBusiness={setBizToDelete}
               userEmail={user?.email ?? ''}
               userIsAdmin={isAdmin(user?.email)}
               onSignOut={handleSignOut}
@@ -484,6 +542,65 @@ function AuthenticatedApp() {
             >
               Got it
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete business confirmation modal ── */}
+      {bizToDelete && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0f1629] border border-[#1e2d4a] rounded-2xl p-8 max-w-sm w-full space-y-5">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-full bg-red-500/15 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-gray-100 leading-snug">
+                  Delete "{bizToDelete.name}"?
+                </h2>
+                <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
+                  This will permanently delete all reviews, insights and competitor data for this business. This cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setBizToDelete(null)}
+                disabled={deleting}
+                className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-300 bg-[#080d1a] border border-[#1e2d4a] rounded-lg hover:bg-white/5 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteBusiness}
+                disabled={deleting}
+                className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {deleting ? (
+                  <>
+                    <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Deleting…
+                  </>
+                ) : 'Delete Business'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Toast ── */}
+      {toast && (
+        <div className="fixed bottom-24 lg:bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+          <div className="flex items-center gap-2.5 bg-[#0f1629] border border-emerald-500/40 text-emerald-300 text-xs font-medium px-4 py-2.5 rounded-xl shadow-lg shadow-black/40">
+            <svg className="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            {toast}
           </div>
         </div>
       )}
