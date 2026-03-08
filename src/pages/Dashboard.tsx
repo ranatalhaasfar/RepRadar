@@ -9,8 +9,7 @@ import type { Business, Review } from '../lib/supabase'
 
 // ── Outscraper limits ──────────────────────────────────────────────────────
 
-const MAX_REVIEWS_FETCH    = 200 // Initial / force-refresh fetch
-const MAX_REFRESH_FETCH    = 50  // Weekly automatic refresh
+const MAX_REFRESH_FETCH = 50  // Weekly automatic refresh
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
