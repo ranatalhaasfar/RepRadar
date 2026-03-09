@@ -282,6 +282,8 @@ export default function Dashboard() {
   const [catLoading,      setCatLoading]      = useState(false)
   const [catError,        setCatError]        = useState('')
   const [activeCategory,  setActiveCategory]  = useState<string | null>(null)
+  const [expandedCats,    setExpandedCats]    = useState<Set<string>>(new Set())
+  const [catVisibleCount, setCatVisibleCount] = useState<Record<string, number>>({})
 
   // ── Review filter state ──
   const [filterTime,      setFilterTime]      = useState<'all' | 'week' | 'month' | 'older'>('all')
@@ -451,47 +453,82 @@ export default function Dashboard() {
     setAnalysisLoading(true)
     setAnalysisError('')
     try {
-      const res = await fetch('/api/analyze-reviews', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ reviews: revsToAnalyze.map(r => r.review_text) }),
-      })
-      const payload = await res.json()
-      if (!res.ok) throw new Error(payload.error ?? `API error ${res.status}`)
+      // Split: reviews with text go to AI; rating-only reviews get star-based sentiment
+      const withText   = revsToAnalyze.filter(r => r.review_text.trim().length > 0)
+      const ratingOnly = revsToAnalyze.filter(r => r.review_text.trim().length === 0)
 
-      const data: AnalysisResult = payload
+      const starSentiment = (rating: number | null): 'positive' | 'negative' | 'neutral' =>
+        rating !== null && rating >= 4 ? 'positive' : rating !== null && rating <= 2 ? 'negative' : 'neutral'
 
       const sentimentMap = new Map<string, 'positive' | 'negative' | 'neutral'>()
-      revsToAnalyze.forEach((r, i) => {
-        sentimentMap.set(r.id, (data.reviewSentiments[i] ?? 'neutral') as 'positive' | 'negative' | 'neutral')
-      })
+
+      // Assign star-based sentiment for rating-only reviews immediately
+      ratingOnly.forEach(r => sentimentMap.set(r.id, starSentiment(r.rating)))
+
+      // Send only text reviews to AI (skip if none)
+      if (withText.length > 0) {
+        const res = await fetch('/api/analyze-reviews', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ reviews: withText.map(r => r.review_text) }),
+        })
+        const payload = await res.json()
+        if (!res.ok) throw new Error(payload.error ?? `API error ${res.status}`)
+
+        const data: AnalysisResult = payload
+        withText.forEach((r, i) => {
+          sentimentMap.set(r.id, (data.reviewSentiments[i] ?? 'neutral') as 'positive' | 'negative' | 'neutral')
+        })
+
+        // Update business-level stats from AI response
+        const mergedRevs: Review[] = allRevs.map(r =>
+          sentimentMap.has(r.id) ? { ...r, sentiment: sentimentMap.get(r.id)! } : r
+        )
+        const { score: newScore } = computeStats(mergedRevs)
+        const now = new Date().toISOString()
+        await supabase.from('businesses').update({
+          total_reviews:    mergedRevs.length,
+          reputation_score: data.reputationScore ?? newScore,
+          keywords:         data.topKeywords ?? [],
+          analyzed_at:      now,
+        }).eq('id', businessId)
+
+        setTimeline(buildTimeline(mergedRevs))
+        setKeywords(data.topKeywords ?? [])
+
+        const { data: refreshed } = await supabase.from('businesses').select('*').eq('id', businessId).single()
+        if (refreshed) {
+          setDashboard(refreshed as Business, mergedRevs, businessId)
+          lcSave('reviews', businessId, { business: refreshed as Business, reviews: mergedRevs })
+          console.log('[Dashboard] ✅ Analysis complete — saved to localStorage')
+        }
+      }
 
       for (const r of revsToAnalyze) {
         await supabase.from('reviews').update({ sentiment: sentimentMap.get(r.id) }).eq('id', r.id)
       }
 
-      const mergedRevs: Review[] = allRevs.map(r =>
-        sentimentMap.has(r.id) ? { ...r, sentiment: sentimentMap.get(r.id)! } : r
-      )
+      // If there were no text reviews, still update business stats / local state
+      if (withText.length === 0) {
+        const mergedRevs: Review[] = allRevs.map(r =>
+          sentimentMap.has(r.id) ? { ...r, sentiment: sentimentMap.get(r.id)! } : r
+        )
+        const { score: newScore } = computeStats(mergedRevs)
+        const now = new Date().toISOString()
+        await supabase.from('businesses').update({
+          total_reviews: mergedRevs.length,
+          reputation_score: newScore,
+          analyzed_at:  now,
+        }).eq('id', businessId)
 
-      const { score: newScore } = computeStats(mergedRevs)
-      const now = new Date().toISOString()
-      await supabase.from('businesses').update({
-        total_reviews:    mergedRevs.length,
-        reputation_score: data.reputationScore ?? newScore,
-        keywords:         data.topKeywords ?? [],
-        analyzed_at:      now,
-      }).eq('id', businessId)
+        setTimeline(buildTimeline(mergedRevs))
 
-      setTimeline(buildTimeline(mergedRevs))
-      setKeywords(data.topKeywords ?? [])
-
-      // Refresh business row and update store + localStorage
-      const { data: refreshed } = await supabase.from('businesses').select('*').eq('id', businessId).single()
-      if (refreshed) {
-        setDashboard(refreshed as Business, mergedRevs, businessId)
-        lcSave('reviews', businessId, { business: refreshed as Business, reviews: mergedRevs })
-        console.log('[Dashboard] ✅ Analysis complete — saved to localStorage')
+        const { data: refreshed } = await supabase.from('businesses').select('*').eq('id', businessId).single()
+        if (refreshed) {
+          setDashboard(refreshed as Business, mergedRevs, businessId)
+          lcSave('reviews', businessId, { business: refreshed as Business, reviews: mergedRevs })
+          console.log('[Dashboard] ✅ Analysis complete (rating-only) — saved to localStorage')
+        }
       }
 
     } catch (e: unknown) {
@@ -1014,60 +1051,127 @@ export default function Dashboard() {
           )}
 
           {categories.length > 0 ? (
-            <div className="p-4 flex gap-3 overflow-x-auto pb-4 scrollbar-thin">
-              {/* "All" reset chip */}
-              <button
-                onClick={() => setActiveCategory(null)}
-                className={`shrink-0 flex flex-col gap-1 p-3 rounded-xl border text-left transition-all min-w-[120px] max-w-[160px] ${
-                  activeCategory === null
-                    ? 'bg-purple-500/20 border-purple-500/40'
-                    : 'bg-white/5 border-[#1e2d4a] hover:border-purple-500/30'
-                }`}
-              >
-                <span className="text-lg">📋</span>
-                <span className="text-xs font-semibold text-gray-200 leading-tight">All Reviews</span>
-                <span className="text-[10px] text-gray-500">{reviews.length} total</span>
-              </button>
-
+            <div className="divide-y divide-[#1e2d4a]">
               {categories.map(cat => {
                 const cfg = VERDICT_CONFIG[cat.verdict] ?? VERDICT_CONFIG['Needs Improvement']
                 const isActive = activeCategory === cat.name
                 const scorePercent = Math.round(((cat.sentiment_score + 1) / 2) * 100)
+                const isExpanded = expandedCats.has(cat.name)
+                const CAT_PAGE = 5
+
+                // Get matching reviews for this category
+                const catReviews = reviews.filter(r => {
+                  const text = r.review_text.toLowerCase()
+                  const catLower = cat.name.toLowerCase()
+                  const snippetMatch = cat.example_snippets.some(s => text.includes(s.slice(0, 20).toLowerCase()))
+                  return text.includes(catLower) || snippetMatch
+                })
+                const visibleCatCount = catVisibleCount[cat.name] ?? CAT_PAGE
+                const shownReviews = catReviews.slice(0, visibleCatCount)
+                const remaining = catReviews.length - visibleCatCount
+
                 return (
-                  <button
-                    key={cat.name}
-                    onClick={() => setActiveCategory(isActive ? null : cat.name)}
-                    className={`shrink-0 flex flex-col gap-1.5 p-3 rounded-xl border text-left transition-all min-w-[140px] max-w-[180px] ${
-                      isActive
-                        ? `${cfg.bg} ${cfg.border} ring-1 ring-inset ${cfg.border}`
-                        : `${cfg.bg} ${cfg.border} hover:ring-1 hover:ring-inset hover:${cfg.border}`
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-1">
-                      <span className="text-xl">{cat.emoji}</span>
-                      <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${cfg.badge}`}>
-                        {cat.verdict}
-                      </span>
-                    </div>
-                    <span className="text-xs font-semibold text-gray-200 leading-tight">{cat.name}</span>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-1 bg-[#1e2d4a] rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${
-                            cat.verdict === 'Strength' ? 'bg-emerald-400' :
-                            cat.verdict === 'Critical Issue' ? 'bg-red-400' : 'bg-amber-400'
-                          }`}
-                          style={{ width: `${scorePercent}%` }}
-                        />
+                  <div key={cat.name} className={`${cfg.bg}`}>
+                    {/* Category header row */}
+                    <div className="px-4 py-3 flex items-center gap-3">
+                      <span className="text-xl shrink-0">{cat.emoji}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-semibold text-gray-200">{cat.name}</span>
+                          <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${cfg.badge}`}>
+                            {cat.verdict}
+                          </span>
+                          <span className="text-[10px] text-gray-500">
+                            {catReviews.length} review{catReviews.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <div className="w-24 h-1 bg-[#1e2d4a] rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                cat.verdict === 'Strength' ? 'bg-emerald-400' :
+                                cat.verdict === 'Critical Issue' ? 'bg-red-400' : 'bg-amber-400'
+                              }`}
+                              style={{ width: `${scorePercent}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-gray-500">{scorePercent}% positive</span>
+                        </div>
                       </div>
-                      <span className="text-[9px] text-gray-500 shrink-0">{cat.review_count} reviews</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* Filter main list by this category */}
+                        <button
+                          onClick={() => setActiveCategory(isActive ? null : cat.name)}
+                          className={`text-[10px] px-2 py-1 rounded-lg border transition-colors ${
+                            isActive
+                              ? 'bg-purple-500/20 border-purple-500/40 text-purple-300'
+                              : 'border-[#1e2d4a] text-gray-500 hover:border-purple-500/40 hover:text-purple-400'
+                          }`}
+                        >
+                          {isActive ? '✓ Filtering' : 'Filter list'}
+                        </button>
+                        {/* Expand/collapse reviews inside this card */}
+                        {catReviews.length > 0 && (
+                          <button
+                            onClick={() => setExpandedCats(prev => {
+                              const next = new Set(prev)
+                              isExpanded ? next.delete(cat.name) : next.add(cat.name)
+                              return next
+                            })}
+                            className="text-[10px] px-2 py-1 rounded-lg border border-[#1e2d4a] text-gray-500 hover:border-purple-500/40 hover:text-purple-400 transition-colors flex items-center gap-1"
+                          >
+                            {isExpanded ? '▲ Hide' : '▼ Show reviews'}
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    {cat.example_snippets[0] && (
-                      <p className="text-[10px] text-gray-500 leading-tight line-clamp-2 italic">
-                        "{cat.example_snippets[0]}"
-                      </p>
+
+                    {/* Expanded reviews list */}
+                    {isExpanded && catReviews.length > 0 && (
+                      <div className="border-t border-[#1e2d4a]/60">
+                        {shownReviews.map(r => (
+                          <div key={r.id} className="px-4 py-3 border-b border-[#1e2d4a]/40 last:border-b-0 flex items-start gap-3">
+                            <div className={`w-7 h-7 rounded-full bg-gradient-to-br shrink-0 flex items-center justify-center text-white text-[10px] font-bold ${
+                              r.sentiment === 'positive' ? 'from-emerald-600 to-teal-700' :
+                              r.sentiment === 'negative' ? 'from-red-600 to-pink-700' :
+                              'from-purple-600 to-blue-600'
+                            }`}>
+                              {r.reviewer_name[0]?.toUpperCase() ?? '?'}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-xs font-medium text-gray-300">{r.reviewer_name}</span>
+                                <StarRating rating={r.rating} />
+                              </div>
+                              <p className={`text-[11px] mt-0.5 leading-relaxed ${r.review_text.trim() ? 'text-gray-500' : 'text-gray-600 italic'}`}>
+                                {r.review_text.trim() || 'No written review'}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+
+                        {/* Show more / show less controls */}
+                        <div className="px-4 py-2 flex items-center gap-3">
+                          {remaining > 0 && (
+                            <button
+                              onClick={() => setCatVisibleCount(prev => ({ ...prev, [cat.name]: visibleCatCount + CAT_PAGE }))}
+                              className="text-[11px] text-purple-400 hover:text-purple-300 transition-colors"
+                            >
+                              Show {Math.min(remaining, CAT_PAGE)} more ({remaining} remaining)
+                            </button>
+                          )}
+                          {visibleCatCount > CAT_PAGE && (
+                            <button
+                              onClick={() => setCatVisibleCount(prev => ({ ...prev, [cat.name]: CAT_PAGE }))}
+                              className="text-[11px] text-gray-600 hover:text-gray-400 transition-colors"
+                            >
+                              Show less
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     )}
-                  </button>
+                  </div>
                 )
               })}
             </div>
@@ -1155,7 +1259,8 @@ export default function Dashboard() {
               >
                 {filteredReviews.slice(0, visibleCount).map(r => {
                   const isExpanded = expandedReviews.has(r.id)
-                  const isLong = r.review_text.length > 220
+                  const hasText = r.review_text.trim().length > 0
+                  const isLong = hasText && r.review_text.length > 220
                   const displayText = isLong && !isExpanded
                     ? r.review_text.slice(0, 220) + '…'
                     : r.review_text
@@ -1169,7 +1274,7 @@ export default function Dashboard() {
                     r.sentiment === 'positive' ? 'from-emerald-600 to-teal-700' :
                     r.sentiment === 'negative' ? 'from-red-600 to-pink-700' :
                     'from-purple-600 to-blue-600'
-                  const needsResponse = r.sentiment === 'negative'
+                  const needsResponse = r.sentiment === 'negative' && hasText
 
                   return (
                     <div key={r.id} className={`px-4 sm:px-6 py-4 flex items-start gap-3 hover:bg-white/[0.02] transition-colors ${sentBorder}`}>
@@ -1195,19 +1300,25 @@ export default function Dashboard() {
                             <span className="text-[10px] text-gray-600 shrink-0">{dateStr}</span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-400 leading-relaxed mt-1.5">
-                          {displayText}
-                          {isLong && (
-                            <button
-                              onClick={() => setExpandedReviews(prev => {
-                                const next = new Set(prev)
-                                isExpanded ? next.delete(r.id) : next.add(r.id)
-                                return next
-                              })}
-                              className="ml-1 text-purple-400 hover:text-purple-300 underline"
-                            >
-                              {isExpanded ? 'less' : 'more'}
-                            </button>
+                        <p className={`text-xs leading-relaxed mt-1.5 ${hasText ? 'text-gray-400' : 'text-gray-600 italic'}`}>
+                          {hasText ? (
+                            <>
+                              {displayText}
+                              {isLong && (
+                                <button
+                                  onClick={() => setExpandedReviews(prev => {
+                                    const next = new Set(prev)
+                                    isExpanded ? next.delete(r.id) : next.add(r.id)
+                                    return next
+                                  })}
+                                  className="ml-1 text-purple-400 hover:text-purple-300 underline"
+                                >
+                                  {isExpanded ? 'less' : 'more'}
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            'No written review'
                           )}
                         </p>
                         {needsResponse && (

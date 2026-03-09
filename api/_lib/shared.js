@@ -44,13 +44,12 @@ export function extractReviews(dataArray) {
   // Case 1: each item IS a review (has review_text directly)
   if (typeof first.review_text === 'string' || typeof first.text === 'string') {
     console.log(`[extractReviews] Case 1 — flat reviews, ${flat.length} items`);
-    return flat.map(mapReview).filter(r => r.review_text.trim().length > 0);
+    return flat.map(mapReview);
   }
 
   // Case 2: each item is a place with a .reviews array
   if (Array.isArray(first.reviews)) {
-    const all = flat.flatMap(place => place.reviews.map(mapReview))
-      .filter(r => r.review_text.trim().length > 0);
+    const all = flat.flatMap(place => place.reviews.map(mapReview));
     console.log(`[extractReviews] Case 2 — nested .reviews[], ${all.length} reviews`);
     return all;
   }
@@ -61,7 +60,7 @@ export function extractReviews(dataArray) {
     const reviewItems = inner.filter(item => typeof item.review_text === 'string' || typeof item.text === 'string');
     if (reviewItems.length > 0) {
       console.log(`[extractReviews] Case 3 — inner array with ${reviewItems.length} review items`);
-      return reviewItems.map(mapReview).filter(r => r.review_text.trim().length > 0);
+      return reviewItems.map(mapReview);
     }
   }
 
@@ -72,8 +71,7 @@ export function extractReviews(dataArray) {
     ('review_text' in first[k][0] || 'text' in first[k][0] || 'author_title' in first[k][0])
   );
   if (reviewKey) {
-    const all = flat.flatMap(place => (Array.isArray(place[reviewKey]) ? place[reviewKey] : []).map(mapReview))
-      .filter(r => r.review_text.trim().length > 0);
+    const all = flat.flatMap(place => (Array.isArray(place[reviewKey]) ? place[reviewKey] : []).map(mapReview));
     console.log(`[extractReviews] Case 4 — reviews at key "${reviewKey}", ${all.length} reviews`);
     return all;
   }
