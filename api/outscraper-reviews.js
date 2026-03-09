@@ -46,16 +46,19 @@ export default async function handler(req, res) {
     const batch2 = await runJob(place_id, 100, 100, sort, apiKey);
     console.log(`[outscraper-reviews] Batch 2 reviews: ${batch2.length}`);
 
-    // ── Merge + deduplicate by review_text ───────────────────────────────────
+    // ── Merge + deduplicate ───────────────────────────────────────────────────
+    // Key: reviewer_name + review_text (handles rating-only reviews that have no text)
     const seen = new Set();
     const allReviews = [...batch1, ...batch2].filter(r => {
-      const key = r.review_text?.trim();
-      if (!key || seen.has(key)) return false;
+      const key = `${r.reviewer_name ?? ''}||${r.review_text ?? ''}||${r.reviewed_at ?? ''}`;
+      if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
 
-    console.log(`[outscraper-reviews] Total after merge+dedup: ${allReviews.length}`);
+    console.log(`[outscraper-reviews] Batch 1: ${batch1.length} reviews`);
+    console.log(`[outscraper-reviews] Batch 2: ${batch2.length} reviews`);
+    console.log(`[outscraper-reviews] Total merged: ${allReviews.length} reviews`);
     return res.json({ reviews: allReviews });
 
   } catch (error) {
