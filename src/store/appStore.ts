@@ -30,6 +30,7 @@ export type Category = {
   sentiment_score:  number   // –1 to 1
   verdict:          'Strength' | 'Needs Improvement' | 'Critical Issue'
   example_snippets: string[]
+  reviewIndices:    number[] // 0-based indices into the reviews array
 }
 
 // ── Store shape ───────────────────────────────────────────────────────────────

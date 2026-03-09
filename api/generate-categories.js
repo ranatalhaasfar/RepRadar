@@ -11,20 +11,26 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Cap at 30 reviews to keep prompt size reasonable
-    const sample = reviews.slice(0, 30);
-    const reviewList = sample
+    // Build numbered list — include ALL reviews (up to 200)
+    const reviewList = reviews
       .map((r, i) => {
         const stars = r.rating ? `${r.rating}★` : 'no rating';
-        return `${i + 1}. [${stars}] ${r.review_text}`;
+        const text  = r.review_text?.trim() || '(no written review)';
+        return `${i}. [${stars}] ${text}`;
       })
       .join('\n');
 
     const client = getClient();
     const message = await client.messages.create({
       model: 'claude-opus-4-6',
-      max_tokens: 2048,
+      max_tokens: 4096,
       system: `You are a review analysis expert. Analyze the provided customer reviews and identify 5–8 distinct categories that are genuinely relevant to THIS specific business based on what customers actually mention.
+
+CRITICAL RULES:
+1. Every review index (0 to ${reviews.length - 1}) MUST appear in at least one category's reviewIndices.
+2. A review may appear in multiple categories if relevant.
+3. reviewIndices must be 0-based integers matching the review numbers in the input.
+4. "review_count" must equal the length of reviewIndices for that category.
 
 Return ONLY a JSON array (no markdown, no explanation) with objects shaped exactly like this:
 {
@@ -33,20 +39,23 @@ Return ONLY a JSON array (no markdown, no explanation) with objects shaped exact
   "review_count": 12,
   "sentiment_score": 0.75,
   "verdict": "Strength",
-  "example_snippets": ["short quote 1", "short quote 2", "short quote 3"]
+  "example_snippets": ["short quote 1", "short quote 2"],
+  "reviewIndices": [0, 3, 7, 12, 15]
 }
 
 Rules:
 - "verdict" must be exactly one of: "Strength", "Needs Improvement", "Critical Issue"
 - "sentiment_score" is a float from -1.0 (very negative) to 1.0 (very positive)
-- "review_count" is the number of reviews that mention this category
+- "review_count" must equal reviewIndices.length
 - "example_snippets" must be 1–3 short direct quotes (max ~15 words each) from the actual reviews
+- "reviewIndices" is a list of 0-based review indices that belong to this category
+- ALL ${reviews.length} review indices (0–${reviews.length - 1}) must be covered across all categories
 - Categories must reflect real patterns in the data — do not invent generic categories
 - Order by review_count descending`,
       messages: [
         {
           role: 'user',
-          content: `Here are ${sample.length} customer reviews. Identify the key categories:\n\n${reviewList}`,
+          content: `Here are ${reviews.length} customer reviews (0-indexed). Identify 5–8 key categories and assign EVERY review to at least one category:\n\n${reviewList}`,
         },
       ],
     });
