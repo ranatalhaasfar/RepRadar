@@ -963,6 +963,7 @@ export default function Dashboard() {
               )}
             </div>
             <button
+              data-generate-categories
               onClick={generateCategories}
               disabled={catLoading || reviews.length === 0}
               className="min-h-[36px] px-3 py-1.5 text-xs text-purple-400 border border-purple-500/30 hover:bg-purple-500/10 rounded-lg transition-all disabled:opacity-40 flex items-center gap-1.5 shrink-0"
@@ -987,6 +988,16 @@ export default function Dashboard() {
             </div>
           )}
 
+          {!catError && categories.length > 0 && categories.every(c => !Array.isArray(c.reviewIndices) || c.reviewIndices.length === 0) && (
+            <div className="px-6 py-2.5 bg-amber-500/8 border-b border-amber-500/20 flex items-center justify-between gap-3">
+              <p className="text-[11px] text-amber-400/80">Categories need regenerating to show accurate review counts.</p>
+              <button
+                onClick={() => document.querySelector<HTMLButtonElement>('[data-generate-categories]')?.click()}
+                className="text-[11px] text-amber-400 hover:text-amber-300 underline underline-offset-2 shrink-0"
+              >Refresh now</button>
+            </div>
+          )}
+
           {categories.length > 0 ? (() => {
             // Build the exact review list for every category using reviewIndices (the source of truth).
             // Falls back to full text matching only when no indices exist (old cached data).
@@ -994,13 +1005,11 @@ export default function Dashboard() {
               if (Array.isArray(cat.reviewIndices) && cat.reviewIndices.length > 0) {
                 return cat.reviewIndices.map(i => reviews[i]).filter((r): r is Review => r !== undefined)
               }
-              // Fallback for categories generated before the new prompt
-              return reviews.filter(r => {
-                const text = r.review_text.toLowerCase()
-                const snippetMatch = cat.example_snippets?.some(s => text.includes(s.slice(0, 20).toLowerCase())) ?? false
-                return text.includes(cat.name.toLowerCase()) || snippetMatch
-              })
+              // Stale cached categories (no reviewIndices) — show all reviews
+              // so the list isn't misleadingly short. User can regenerate to get proper scoping.
+              return reviews
             }
+
 
             const activeCat = categories.find(c => c.name === activeCategory) ?? null
             const catReviewList: Review[] = activeCat ? getCatReviews(activeCat) : reviews
