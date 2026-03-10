@@ -61,10 +61,16 @@ Rules:
     });
 
     const raw = message.content[0]?.text ?? '';
-    const clean = raw
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```$/i, '')
+    // Strip markdown code fences anywhere in the response, then extract the JSON array
+    let clean = raw
+      .replace(/```(?:json)?/gi, '')
       .trim();
+    // If the response has prose before/after the array, extract just the array
+    const arrayStart = clean.indexOf('[');
+    const arrayEnd   = clean.lastIndexOf(']');
+    if (arrayStart !== -1 && arrayEnd !== -1 && arrayEnd > arrayStart) {
+      clean = clean.slice(arrayStart, arrayEnd + 1);
+    }
 
     let parsed;
     try {
