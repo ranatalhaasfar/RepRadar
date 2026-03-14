@@ -624,7 +624,8 @@ function CompetitorSection({ competitors }: { competitors: CompetitorAnalysis[];
               {/* 3-column grid */}
               <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-[#1a2540]">
                 {columns.map(col => {
-                  const items: string[] = Array.isArray(comp[col.key]) ? comp[col.key] as string[] : []
+                  const raw = comp[col.key]
+                  const items: string[] = toStringArray(raw)
                   return (
                     <div key={col.key} className="p-3 space-y-2">
                       <p className={`text-[11px] font-bold uppercase tracking-wide ${col.textColor}`}>
@@ -637,7 +638,7 @@ function CompetitorSection({ competitors }: { competitors: CompetitorAnalysis[];
                           {items.map((item, i) => (
                             <li key={i} className="flex items-start gap-1.5 text-[11px] text-gray-300">
                               <span className={`${col.dotColor} shrink-0 mt-0.5`}>•</span>
-                              {item}
+                              {typeof item === 'string' ? item : JSON.stringify(item)}
                             </li>
                           ))}
                         </ul>
@@ -1087,12 +1088,40 @@ function PageHeader({ businessName, report, generating, onGenerate, onDownload }
 
 // ── Normalizer ─────────────────────────────────────────────────────────────
 
+// Converts any array to an array of plain strings — protects against stale DB
+// rows that stored objects where string[] is now expected.
+function toStringArray(val: unknown): string[] {
+  if (!Array.isArray(val)) return []
+  return val.map(item => {
+    if (typeof item === 'string') return item
+    if (item && typeof item === 'object') {
+      // Old CompetitorWeakness shape: { problem_name, comp_mentions, ... }
+      const o = item as Record<string, unknown>
+      if (typeof o.problem_name === 'string') return o.problem_name
+      return JSON.stringify(item)
+    }
+    return String(item)
+  })
+}
+
 function normalizeReport(raw: Record<string, unknown>): IntelReport {
   const rawBrief = (raw.weekly_brief ?? {}) as Record<string, unknown>
   return {
     business_id:         (raw.business_id as string) ?? '',
     problems:            Array.isArray(raw.problems)            ? raw.problems as Problem[]            : [],
-    competitor_analysis: Array.isArray(raw.competitor_analysis) ? raw.competitor_analysis as CompetitorAnalysis[] : [],
+    competitor_analysis: Array.isArray(raw.competitor_analysis)
+      ? (raw.competitor_analysis as Record<string, unknown>[]).map(c => ({
+          id:             typeof c.id === 'string'             ? c.id             : String(c.id ?? ''),
+          name:           typeof c.name === 'string'           ? c.name           : String(c.name ?? ''),
+          google_rating:  typeof c.google_rating === 'number'  ? c.google_rating  : null,
+          total_reviews:  typeof c.total_reviews === 'number'  ? c.total_reviews  : null,
+          rating_gap:     typeof c.rating_gap === 'number'     ? c.rating_gap     : 0,
+          // Sanitize: old DB rows have weaknesses as objects; new rows have string arrays
+          weaknesses:    toStringArray(c.weaknesses),
+          they_do_better: toStringArray(c.they_do_better),
+          opportunities:  toStringArray(c.opportunities),
+        }))
+      : [],
     week_buckets:        Array.isArray(raw.week_buckets)        ? raw.week_buckets as string[]         : [],
     health_score:        (raw.health_score as number)           ?? 0,
     health_breakdown:    (raw.health_breakdown as HealthBreakdown | null) ?? null,
