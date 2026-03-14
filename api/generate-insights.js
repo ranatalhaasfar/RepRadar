@@ -15,7 +15,7 @@ export default async function handler(req, res) {
 
     const response = await getClient().messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 400,
+      max_tokens: 1000,
       system: 'You are a business intelligence engine. Return only valid JSON — no markdown, no explanation, no code fences.',
       messages: [{
         role: 'user',
