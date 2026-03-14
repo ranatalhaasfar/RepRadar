@@ -25,7 +25,7 @@ export default async function handler(req) {
     async start(controller) {
       try {
         const anthropicStream = getClient().messages.stream({
-          model: 'claude-opus-4-6',
+          model: 'claude-sonnet-4-6',
           max_tokens: 512,
           system:
             'You are an expert customer service consultant helping small business owners respond to customer reviews. ' +

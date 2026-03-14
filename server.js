@@ -55,7 +55,7 @@ app.post('/api/generate-response', async (req, res) => {
 
   try {
     const stream = getClient().messages.stream({
-      model: 'claude-opus-4-6',
+      model: 'claude-sonnet-4-6',
       max_tokens: 512,
       system:
         'You are an expert customer service consultant helping small business owners respond to customer reviews. ' +
@@ -105,7 +105,7 @@ app.post('/api/analyze-reviews', async (req, res) => {
     const numbered = reviews.map((r, i) => `${i + 1}. ${r}`).join('\n');
 
     const response = await getClient().messages.create({
-      model: 'claude-opus-4-6',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1024,
       system: 'You are a review analysis engine. Return only valid JSON — no markdown, no explanation, no code fences.',
       messages: [{
@@ -146,7 +146,7 @@ app.post('/api/generate-insights', async (req, res) => {
     const sample = reviews.slice(0, 20).join('\n');
 
     const response = await getClient().messages.create({
-      model: 'claude-opus-4-6',
+      model: 'claude-sonnet-4-6',
       max_tokens: 2048,
       system: 'You are a business intelligence engine. Return only valid JSON — no markdown, no explanation, no code fences.',
       messages: [{
