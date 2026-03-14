@@ -23,7 +23,7 @@ export default async function handler(req, res) {
     const client = getClient();
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
+      max_tokens: 600,
       system: `You are a review analysis expert. Analyze the provided customer reviews and identify 5–8 distinct categories that are genuinely relevant to THIS specific business based on what customers actually mention.
 
 CRITICAL RULES:
