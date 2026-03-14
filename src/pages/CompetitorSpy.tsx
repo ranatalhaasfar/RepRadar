@@ -7,10 +7,6 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useAppStore } from '../store/appStore'
 
-// ── Outscraper limits ──────────────────────────────────────────────────────
-
-const COMPETITOR_REVIEWS_LIMIT = 200 // Reviews per competitor
-
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type CompetitorEntry = {
@@ -22,12 +18,23 @@ type CompetitorEntry = {
   google_rating: number | null
   total_reviews: number | null
   reviews_fetched_at: string | null
+  fetched_count?: number  // Actual count in our DB
 }
 
-type AIComparison = {
-  summary:   string
-  strengths: string[]
-  gaps:      string[]
+type CompetitorInsights = {
+  review_velocity:       string
+  biggest_weakness:      string
+  your_advantages:       string[]
+  rating_trend:          string
+  steal_their_customers: string
+}
+
+type InsightState = {
+  data:         CompetitorInsights | null
+  loading:      boolean
+  error:        string
+  generated_at: string | null
+  cached:       boolean
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────
@@ -63,12 +70,106 @@ function CustomTooltip({ active, payload, label }: {
   )
 }
 
-function SpinnerIcon() {
+function SpinnerIcon({ size = 4 }: { size?: number }) {
   return (
-    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+    <svg className={`animate-spin h-${size} w-${size}`} viewBox="0 0 24 24" fill="none">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
+  )
+}
+
+function InsightSection({
+  competitorId,
+  competitor,
+  insightState,
+  onRefresh,
+}: {
+  competitorId: string
+  competitor: CompetitorEntry
+  insightState: InsightState
+  onRefresh: (competitorId: string) => void
+}) {
+  const { data, loading, error } = insightState
+
+  return (
+    <div className="card p-4 sm:p-5 space-y-4">
+      {/* Section header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🔍</span>
+          <div>
+            <h4 className="text-sm font-semibold text-gray-200">{competitor.name}</h4>
+            <p className="text-xs text-gray-500">Competitive Intelligence</p>
+          </div>
+        </div>
+        <button
+          onClick={() => onRefresh(competitorId)}
+          disabled={loading}
+          className="text-xs text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+        >
+          {loading ? <SpinnerIcon size={3} /> : '↻'} Refresh Insights
+        </button>
+      </div>
+
+      {error && (
+        <p className="text-xs text-red-400">{error}</p>
+      )}
+
+      {loading && !data && (
+        <div className="flex items-center gap-2 text-xs text-gray-500 py-2">
+          <SpinnerIcon size={3} /> Analyzing competitor reviews…
+        </div>
+      )}
+
+      {data && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Review Velocity */}
+          <div className="bg-[#080d1a] rounded-lg p-3 border border-[#1e2d4a]">
+            <p className="text-xs font-medium text-blue-400 mb-1.5">📈 Review Velocity</p>
+            <p className="text-xs text-gray-400 leading-relaxed">{data.review_velocity}</p>
+          </div>
+
+          {/* Rating Trend */}
+          <div className="bg-[#080d1a] rounded-lg p-3 border border-[#1e2d4a]">
+            <p className="text-xs font-medium text-amber-400 mb-1.5">📊 Rating Trend</p>
+            <p className="text-xs text-gray-400 leading-relaxed">{data.rating_trend}</p>
+          </div>
+
+          {/* Their Biggest Weakness */}
+          <div className="bg-[#080d1a] rounded-lg p-3 border border-[#1e2d4a]">
+            <p className="text-xs font-medium text-red-400 mb-1.5">⚠️ Their Biggest Weakness</p>
+            <p className="text-xs text-gray-400 leading-relaxed">{data.biggest_weakness}</p>
+          </div>
+
+          {/* Your Advantages */}
+          <div className="bg-[#080d1a] rounded-lg p-3 border border-[#1e2d4a]">
+            <p className="text-xs font-medium text-emerald-400 mb-1.5">✅ Your Advantages</p>
+            <ul className="space-y-1">
+              {(data.your_advantages ?? []).map((adv, i) => (
+                <li key={i} className="text-xs text-gray-400 flex items-start gap-1.5">
+                  <span className="text-emerald-500 shrink-0 mt-0.5">›</span>
+                  {adv}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Steal Their Customers — full width */}
+          <div className="sm:col-span-2 bg-purple-500/10 rounded-lg p-3 border border-purple-500/20">
+            <p className="text-xs font-medium text-purple-400 mb-1.5">🎯 Steal Their Customers</p>
+            <p className="text-xs text-gray-300 leading-relaxed">{data.steal_their_customers}</p>
+          </div>
+        </div>
+      )}
+
+      {insightState.generated_at && (
+        <p className="text-xs text-gray-600">
+          {insightState.cached ? '🗄 Cached · ' : '✨ Just generated · '}
+          {new Date(insightState.generated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -86,21 +187,23 @@ export default function CompetitorSpy() {
     { name: '', city: '' },
   ])
 
-  const [competitors, setCompetitors]     = useState<CompetitorEntry[]>([])
-  const [comparison, setComparison]       = useState<AIComparison | null>(null)
-  const [isLoading, setIsLoading]         = useState(false)
-  const [loadingMsg, setLoadingMsg]       = useState('')
-  const [error, setError]                 = useState('')
-  const [hasResults, setHasResults]       = useState(false)
+  const [competitors, setCompetitors] = useState<CompetitorEntry[]>([])
+  const [isLoading, setIsLoading]     = useState(false)
+  const [loadingMsg, setLoadingMsg]   = useState('')
+  const [error, setError]             = useState('')
+  const [hasResults, setHasResults]   = useState(false)
 
-  // ── Load cached competitors on business change ────────────────────────────
+  // Per-competitor insight state: competitorId → InsightState
+  const [insightStates, setInsightStates] = useState<Record<string, InsightState>>({})
+
+  // ── Load cached competitors and insights on business change ────────────────
 
   useEffect(() => {
     if (!user || !activeBusiness) return
     ;(async () => {
       const biz = activeBusiness
 
-      // Load my reviews for AI comparison
+      // Load my reviews
       const { data: revs } = await supabase
         .from('reviews')
         .select('review_text')
@@ -113,15 +216,48 @@ export default function CompetitorSpy() {
         .select('*')
         .eq('business_id', biz.id)
         .order('created_at', { ascending: true })
+
       if (comps && comps.length > 0) {
-        setCompetitors(comps)
+        // Fetch DB review counts for each competitor
+        const withCounts = await Promise.all(comps.map(async c => {
+          const { count } = await supabase
+            .from('reviews')
+            .select('id', { count: 'exact', head: true })
+            .eq('business_id', c.id)
+          return { ...c, fetched_count: count ?? 0 }
+        }))
+
+        setCompetitors(withCounts)
         setHasResults(true)
-        // Pre-fill inputs
         setInputs(
           comps.slice(0, 3).map(c => ({ name: c.name, city: c.location ?? '' })).concat(
             Array(Math.max(0, 3 - comps.length)).fill({ name: '', city: '' })
           ).slice(0, 3)
         )
+
+        // Load cached insights for each competitor
+        const ids = withCounts.filter(c => c.id).map(c => c.id)
+        if (ids.length > 0) {
+          const { data: cachedInsights } = await supabase
+            .from('competitor_analysis')
+            .select('*')
+            .eq('business_id', biz.id)
+            .in('competitor_id', ids)
+
+          if (cachedInsights && cachedInsights.length > 0) {
+            const newStates: Record<string, InsightState> = {}
+            cachedInsights.forEach(row => {
+              newStates[row.competitor_id] = {
+                data:         row.insights,
+                loading:      false,
+                error:        '',
+                generated_at: row.generated_at,
+                cached:       true,
+              }
+            })
+            setInsightStates(newStates)
+          }
+        }
       } else {
         setCompetitors([])
         setHasResults(false)
@@ -134,6 +270,71 @@ export default function CompetitorSpy() {
     setInputs(prev => { const next = [...prev]; next[i] = { ...next[i], [field]: val }; return next })
   }
 
+  // ── Fetch insights for a single competitor ───────────────────────────────
+
+  const fetchInsights = async (comp: CompetitorEntry, refresh = false) => {
+    if (!activeBusiness || !comp.id) return
+
+    setInsightStates(prev => ({
+      ...prev,
+      [comp.id]: { data: prev[comp.id]?.data ?? null, loading: true, error: '', generated_at: prev[comp.id]?.generated_at ?? null, cached: false },
+    }))
+
+    try {
+      // Fetch competitor review texts from DB
+      const { data: compRevs } = await supabase
+        .from('reviews')
+        .select('review_text')
+        .eq('business_id', comp.id)
+        .limit(30)
+      const competitorReviews = (compRevs ?? []).map(r => r.review_text)
+
+      const res = await fetch('/api/competitor-insights', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          business_id:       activeBusiness.id,
+          competitor_id:     comp.id,
+          businessName:      activeBusiness.name,
+          businessType:      activeBusiness.type,
+          myRating:          activeBusiness.google_rating,
+          competitorName:    comp.name,
+          competitorRating:  comp.google_rating,
+          competitorReviews,
+          myReviews:         myReviewTexts.slice(0, 15),
+          refresh,
+        }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error ?? 'Failed to generate insights')
+      }
+
+      const { insights, cached, generated_at } = await res.json()
+      setInsightStates(prev => ({
+        ...prev,
+        [comp.id]: { data: insights, loading: false, error: '', generated_at, cached },
+      }))
+    } catch (e: unknown) {
+      setInsightStates(prev => ({
+        ...prev,
+        [comp.id]: {
+          data:         prev[comp.id]?.data ?? null,
+          loading:      false,
+          error:        e instanceof Error ? e.message : 'Failed to generate insights',
+          generated_at: prev[comp.id]?.generated_at ?? null,
+          cached:       false,
+        },
+      }))
+    }
+  }
+
+  const handleRefreshInsights = (competitorId: string) => {
+    const comp = competitors.find(c => c.id === competitorId)
+    if (comp) fetchInsights(comp, true)
+  }
+
   // ── Run competitor spy ───────────────────────────────────────────────────
 
   const runSpy = async () => {
@@ -143,17 +344,16 @@ export default function CompetitorSpy() {
     setError('')
     setIsLoading(true)
     setHasResults(false)
-    setComparison(null)
+    setInsightStates({})
 
     try {
       const results: CompetitorEntry[] = []
-      const allCompReviews: { name: string; reviews: string[] }[] = []
 
       for (const entry of entries) {
         const compName = entry.name.trim()
         const compCity = entry.city.trim() || activeBusiness?.location || ''
 
-        // 1. Search Google Maps via Outscraper
+        // 1. Search Google Maps
         setLoadingMsg(`Searching Google Maps for "${compName}"…`)
         const qs = new URLSearchParams({ name: compName, city: compCity })
         const searchRes  = await fetch(`/api/outscraper-search?${qs}`)
@@ -164,29 +364,32 @@ export default function CompetitorSpy() {
             id: '', name: compName, location: compCity,
             place_id: null, full_address: null,
             google_rating: null, total_reviews: null,
-            reviews_fetched_at: null,
+            reviews_fetched_at: null, fetched_count: 0,
           })
           continue
         }
 
-        // 2. Fetch reviews for this competitor (only if we have a valid Google Place ID)
-        let revData: { reviews: { review_text: string }[] } = { reviews: [] }
+        // 2. Fetch 50 most-recent reviews for this competitor
+        let fetchedCount = 0
         if (typeof searchData.place_id === 'string' && searchData.place_id.startsWith('ChIJ')) {
-          setLoadingMsg(`Fetching reviews for "${searchData.name}"… (may take up to 2 min)`)
-          console.log('OUTSCRAPER CALL ABOUT TO BE MADE — place_id:', searchData.place_id)
+          setLoadingMsg(`Fetching reviews for "${searchData.name}"… (may take 1–2 min)`)
+          console.log('OUTSCRAPER CALL — competitor place_id:', searchData.place_id)
           const revRes = await fetch('/api/outscraper-reviews', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ place_id: searchData.place_id, limit: COMPETITOR_REVIEWS_LIMIT, sort: 'newest' }),
+            body:    JSON.stringify({
+              place_id:      searchData.place_id,
+              competitor:    true,
+              business_id:   activeBusiness?.id,
+              competitor_id: searchData.place_id, // temp; replaced after DB save
+            }),
           })
-          revData = revRes.ok ? await revRes.json() : { reviews: [] }
+          if (revRes.ok) {
+            const revData = await revRes.json()
+            fetchedCount = (revData.reviews ?? []).length
+          }
         } else {
           console.error('BLOCKED competitor review fetch — invalid place_id:', searchData.place_id)
-        }
-        const fetchedReviews: string[] = (revData.reviews ?? []).map((r: { review_text: string }) => r.review_text)
-
-        if (fetchedReviews.length > 0) {
-          allCompReviews.push({ name: searchData.name, reviews: fetchedReviews })
         }
 
         results.push({
@@ -196,6 +399,7 @@ export default function CompetitorSpy() {
           google_rating: searchData.rating,
           total_reviews: searchData.reviews_count,
           reviews_fetched_at: new Date().toISOString(),
+          fetched_count: fetchedCount,
         })
       }
 
@@ -222,48 +426,10 @@ export default function CompetitorSpy() {
       setCompetitors(results)
       setHasResults(true)
 
-      // 4. AI comparison if we have reviews
-      if (myReviewTexts.length > 0 && allCompReviews.length > 0) {
-        setLoadingMsg('Generating AI comparison…')
-        try {
-          const compBlock = allCompReviews.map(c =>
-            `${c.name}:\n${c.reviews.slice(0, 15).join('\n')}`
-          ).join('\n\n---\n\n')
-
-          const aiRes = await fetch('/api/generate-insights', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              businessName: activeBusiness?.name ?? 'My Business',
-              businessType: activeBusiness?.type ?? 'Business',
-              reviews: [
-                '=== MY BUSINESS REVIEWS ===',
-                ...myReviewTexts.slice(0, 20),
-                '=== COMPETITOR REVIEWS ===',
-                compBlock,
-              ],
-            }),
-          })
-          if (aiRes.ok) {
-            const aiData = await aiRes.json()
-            // Extract a summary and strengths/gaps from the insights
-            const insights = aiData.insights ?? []
-            const strengths = insights
-              .filter((i: { impact: string }) => i.impact === 'High')
-              .map((i: { title: string }) => i.title)
-              .slice(0, 3)
-            const gaps = insights
-              .filter((i: { impact: string }) => i.impact !== 'High')
-              .map((i: { title: string }) => i.title)
-              .slice(0, 3)
-            setComparison({
-              summary: `Analyzed ${myReviewTexts.length} of your reviews vs ${allCompReviews.reduce((sum, c) => sum + c.reviews.length, 0)} competitor reviews.`,
-              strengths,
-              gaps,
-            })
-          }
-        } catch {
-          // AI comparison is best-effort — don't fail the whole run
+      // 4. Auto-generate insights for competitors that have reviews
+      for (const comp of results) {
+        if (comp.id && (comp.fetched_count ?? 0) > 0) {
+          fetchInsights(comp, false)
         }
       }
 
@@ -347,7 +513,7 @@ export default function CompetitorSpy() {
           )}
         </button>
         <p className="text-xs text-gray-600 mt-2">
-          Fetches up to 50 real Google reviews per competitor. May take 1–2 minutes.
+          Fetches 50 most-recent Google reviews per competitor. May take 1–2 minutes.
         </p>
       </div>
 
@@ -375,43 +541,6 @@ export default function CompetitorSpy() {
             </div>
           )}
 
-          {/* AI Comparison */}
-          {comparison && (
-            <div className="card p-4 sm:p-6 border-purple-500/20 space-y-4">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xl">🤖</span>
-                <h3 className="text-sm font-semibold text-gray-200">AI Competitive Analysis</h3>
-              </div>
-              <p className="text-xs text-gray-500">{comparison.summary}</p>
-              {comparison.strengths.length > 0 && (
-                <div>
-                  <p className="text-xs font-medium text-emerald-400 mb-2">✅ Your Strengths</p>
-                  <ul className="space-y-1">
-                    {comparison.strengths.map((s, i) => (
-                      <li key={i} className="text-xs text-gray-300 flex items-start gap-2">
-                        <span className="text-emerald-500 mt-0.5 shrink-0">›</span>
-                        {s}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {comparison.gaps.length > 0 && (
-                <div>
-                  <p className="text-xs font-medium text-amber-400 mb-2">⚠ Opportunities</p>
-                  <ul className="space-y-1">
-                    {comparison.gaps.map((g, i) => (
-                      <li key={i} className="text-xs text-gray-300 flex items-start gap-2">
-                        <span className="text-amber-500 mt-0.5 shrink-0">›</span>
-                        {g}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Comparison table */}
           <div className="card overflow-hidden">
             <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-[#1e2d4a]">
@@ -421,7 +550,7 @@ export default function CompetitorSpy() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-[#1e2d4a]">
-                    {['Business', 'Google Rating', 'Total Reviews', 'Address'].map(h => (
+                    {['Business', 'Google Rating', 'Reviews', 'Address'].map(h => (
                       <th key={h} className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         {h}
                       </th>
@@ -453,9 +582,7 @@ export default function CompetitorSpy() {
                       <td className="px-3 sm:px-6 py-3 sm:py-4">
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-blue-500 opacity-70 shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-sm text-gray-300 truncate">{c.name}</p>
-                          </div>
+                          <p className="text-sm text-gray-300 truncate">{c.name}</p>
                         </div>
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 min-w-[120px]">
@@ -464,8 +591,19 @@ export default function CompetitorSpy() {
                           : <span className="text-xs text-gray-600">Not found</span>
                         }
                       </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-400">
-                        {c.total_reviews !== null ? c.total_reviews.toLocaleString() : '—'}
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
+                        {c.fetched_count !== undefined && c.fetched_count > 0 ? (
+                          <div>
+                            <span className="text-sm font-medium text-gray-200">{c.fetched_count} fetched</span>
+                            {c.total_reviews !== null && (
+                              <p className="text-xs text-gray-600">of {c.total_reviews.toLocaleString()} on Google</p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-500">
+                            {c.total_reviews !== null ? c.total_reviews.toLocaleString() : '—'}
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs text-gray-500 max-w-[200px] truncate">
                         {c.full_address ?? c.location ?? '—'}
@@ -503,6 +641,28 @@ export default function CompetitorSpy() {
               </div>
             )
           })()}
+
+          {/* Per-competitor AI insight sections */}
+          {competitors.filter(c => c.id && (c.fetched_count ?? 0) > 0).length > 0 && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-200">Competitor Intelligence</h3>
+                <p className="text-xs text-gray-500 mt-0.5">AI-generated insights based on fetched reviews</p>
+              </div>
+              {competitors
+                .filter(c => c.id && (c.fetched_count ?? 0) > 0)
+                .map(comp => (
+                  <InsightSection
+                    key={comp.id}
+                    competitorId={comp.id}
+                    competitor={comp}
+                    insightState={insightStates[comp.id] ?? { data: null, loading: false, error: '', generated_at: null, cached: false }}
+                    onRefresh={handleRefreshInsights}
+                  />
+                ))
+              }
+            </div>
+          )}
         </>
       )}
 

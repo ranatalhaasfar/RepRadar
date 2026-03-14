@@ -1,27 +1,29 @@
-import { extractReviews } from './_lib/shared.js';
+import { extractReviews, getSupabase } from './_lib/shared.js';
 
 // Two sequential batches of 100 (skip=0, skip=100) → up to 200 reviews total.
 // Each job polls up to 10 × 12 s = 120 s. Combined max: ~240 s.
 // vercel.json: "api/outscraper-reviews.js": { "maxDuration": 300 }
 
-const BATCH_SIZE    = 100;  // Reviews per Outscraper call
 const POLL_INTERVAL = 12000; // 12 s between polls
 const MAX_POLLS     = 10;   // 10 × 12 s = 120 s per job
 
 // Limits exposed to callers
 const REVIEWS_FETCH_LIMIT      = 200;
-const MAX_REFRESH_FETCH        = 50;
-const COMPETITOR_REVIEWS_LIMIT = 200;
+const COMPETITOR_REVIEWS_LIMIT = 50;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { place_id, limit: rawLimit = REVIEWS_FETCH_LIMIT, sort = 'newest' } = req.body;
-  const limit = Math.min(Number(rawLimit) || REVIEWS_FETCH_LIMIT, REVIEWS_FETCH_LIMIT);
-
-  console.log(`[outscraper-reviews] place_id=${place_id} requested limit=${limit} sort=${sort}`);
+  const {
+    place_id,
+    limit: rawLimit = REVIEWS_FETCH_LIMIT,
+    sort = 'newest',
+    competitor = false,      // When true: single 50-review fetch, delete existing first
+    business_id = null,      // Required when competitor=true for DB cleanup
+    competitor_id = null,    // Required when competitor=true for DB cleanup
+  } = req.body;
 
   if (!place_id) return res.status(400).json({ error: 'place_id is required.' });
 
@@ -30,10 +32,44 @@ export default async function handler(req, res) {
     console.error('[outscraper-reviews] BLOCKED — invalid place_id, not calling Outscraper:', place_id);
     return res.status(400).json({ error: 'Invalid business ID — cannot fetch reviews.' });
   }
-  console.log('[outscraper-reviews] OUTSCRAPER CALL ABOUT TO BE MADE — place_id:', place_id);
 
   const apiKey = process.env.OUTSCRAPER_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'OUTSCRAPER_API_KEY is not set.' });
+
+  // ── Competitor mode: single 50-review fetch ──────────────────────────────
+  if (competitor) {
+    const limit = COMPETITOR_REVIEWS_LIMIT;
+    console.log(`[outscraper-reviews] COMPETITOR mode — place_id=${place_id} limit=${limit}`);
+
+    // Delete existing competitor reviews before re-fetching
+    if (business_id && competitor_id) {
+      const supabase = getSupabase();
+      if (supabase) {
+        const { error: delErr } = await supabase
+          .from('reviews')
+          .delete()
+          .eq('business_id', competitor_id);
+        if (delErr) console.error('[outscraper-reviews] delete competitor reviews error:', delErr.message);
+        else console.log(`[outscraper-reviews] deleted existing reviews for competitor ${competitor_id}`);
+      }
+    }
+
+    try {
+      console.log('[outscraper-reviews] OUTSCRAPER CALL — competitor single batch');
+      const reviews = await runJob(place_id, limit, 0, 'date_desc', apiKey);
+      console.log(`[outscraper-reviews] Competitor reviews fetched: ${reviews.length}`);
+      return res.json({ reviews });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[/api/outscraper-reviews] competitor mode error:', message);
+      return res.status(500).json({ error: message });
+    }
+  }
+
+  // ── Main business mode: two batches of 100 ──────────────────────────────
+  const limit = Math.min(Number(rawLimit) || REVIEWS_FETCH_LIMIT, REVIEWS_FETCH_LIMIT);
+  console.log(`[outscraper-reviews] place_id=${place_id} requested limit=${limit} sort=${sort}`);
+  console.log('[outscraper-reviews] OUTSCRAPER CALL ABOUT TO BE MADE — place_id:', place_id);
 
   try {
     // ── Batch 1: reviews 1–100 (skip=0) ─────────────────────────────────────
@@ -47,7 +83,6 @@ export default async function handler(req, res) {
     console.log(`[outscraper-reviews] Batch 2 reviews: ${batch2.length}`);
 
     // ── Merge + deduplicate ───────────────────────────────────────────────────
-    // Key: reviewer_name + review_text (handles rating-only reviews that have no text)
     const seen = new Set();
     const allReviews = [...batch1, ...batch2].filter(r => {
       const key = `${r.reviewer_name ?? ''}||${r.review_text ?? ''}||${r.reviewed_at ?? ''}`;
@@ -56,9 +91,7 @@ export default async function handler(req, res) {
       return true;
     });
 
-    console.log(`[outscraper-reviews] Batch 1: ${batch1.length} reviews`);
-    console.log(`[outscraper-reviews] Batch 2: ${batch2.length} reviews`);
-    console.log(`[outscraper-reviews] Total merged: ${allReviews.length} reviews`);
+    console.log(`[outscraper-reviews] Batch 1: ${batch1.length}, Batch 2: ${batch2.length}, Total merged: ${allReviews.length}`);
     return res.json({ reviews: allReviews });
 
   } catch (error) {
