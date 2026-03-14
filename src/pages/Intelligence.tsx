@@ -347,7 +347,7 @@ function ProblemCard({ problem, maxCount, totalReviews, index, onViewReviews }: 
       {/* Velocity */}
       {isAccelerating && lastThree.some(v => v > 0) && (
         <p className="text-[11px] text-red-400/80">
-          Accelerating — {lastThree.map((v, i) => `${v}`).join(' → ')} mentions (last 3 weeks)
+          Accelerating — {lastThree.map((v) => `${v}`).join(' → ')} mentions (last 3 weeks)
         </p>
       )}
 
