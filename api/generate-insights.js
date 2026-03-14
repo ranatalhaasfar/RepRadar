@@ -1,4 +1,5 @@
 import { getClient } from './_lib/shared.js';
+import { extractJSONObject } from './utils/extractJSON.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -39,9 +40,7 @@ export default async function handler(req, res) {
       }],
     });
 
-    const raw = response.content[0].type === 'text' ? response.content[0].text.trim() : '';
-    const clean = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-    const data = JSON.parse(clean);
+    const data = extractJSONObject(response.content[0].type === 'text' ? response.content[0].text : '')
     res.json(data);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

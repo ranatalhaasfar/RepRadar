@@ -1,4 +1,5 @@
 import { getClient } from './_lib/shared.js';
+import { extractJSON } from './utils/extractJSON.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -60,35 +61,7 @@ Rules:
       ],
     });
 
-    const raw = message.content[0]?.text ?? '';
-    // Strip markdown code fences anywhere in the response, then extract the JSON array
-    let clean = raw
-      .replace(/```(?:json)?/gi, '')
-      .trim();
-    // If the response has prose before/after the array, extract just the array
-    const arrayStart = clean.indexOf('[');
-    const arrayEnd   = clean.lastIndexOf(']');
-    if (arrayStart !== -1 && arrayEnd !== -1 && arrayEnd > arrayStart) {
-      clean = clean.slice(arrayStart, arrayEnd + 1);
-    }
-
-    let parsed;
-    try {
-      parsed = JSON.parse(clean);
-    } catch {
-      throw new Error(`AI returned non-JSON: ${clean.slice(0, 300)}`);
-    }
-
-    // Normalise: handle both bare array [...] and wrapped { categories: [...] }
-    const categories = Array.isArray(parsed)
-      ? parsed
-      : Array.isArray(parsed?.categories)
-        ? parsed.categories
-        : null;
-
-    if (!categories) {
-      throw new Error(`Unexpected AI response shape: ${clean.slice(0, 300)}`);
-    }
+    const categories = extractJSON(message.content[0]?.text ?? '')
 
     return res.json({ categories });
   } catch (error) {
