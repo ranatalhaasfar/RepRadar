@@ -1,4 +1,4 @@
-import { getClient } from './_lib/shared.js';
+import { getClient, getSupabase } from './_lib/shared.js';
 import { extractJSON } from './utils/extractJSON.js';
 
 export default async function handler(req, res) {
@@ -6,24 +6,40 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { reviews } = req.body;
+  const { reviews, business_id } = req.body;
   if (!Array.isArray(reviews) || reviews.length === 0) {
     return res.status(400).json({ error: 'reviews array is required.' });
   }
 
   try {
+    // Hard cache check — return existing Supabase categories if available
+    if (business_id) {
+      const supabase = getSupabase();
+      if (supabase) {
+        const { data: cached } = await supabase
+          .from('categories')
+          .select('*')
+          .eq('business_id', business_id)
+          .order('review_count', { ascending: false });
+        if (cached && cached.length > 0) {
+          console.log('[/api/generate-categories] cache hit for', business_id);
+          const categories = cached.map(row => ({ ...row, reviewIndices: row.review_indices ?? [] }));
+          return res.json({ categories, cached: true });
+        }
+      }
+    }
     // Build numbered list — include ALL reviews (up to 200)
     const reviewList = reviews
       .map((r, i) => {
         const stars = r.rating ? `${r.rating}★` : 'no rating';
-        const text  = r.review_text?.trim() || '(no written review)';
+        const text  = (r.review_text?.trim() || '(no written review)').substring(0, 150);
         return `${i}. [${stars}] ${text}`;
       })
       .join('\n');
 
     const client = getClient();
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1500,
       system: `You are a review analysis expert. Analyze the provided customer reviews and identify 5–8 distinct categories that are genuinely relevant to THIS specific business based on what customers actually mention.
 

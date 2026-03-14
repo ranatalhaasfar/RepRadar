@@ -1,4 +1,4 @@
-import { getClient } from './_lib/shared.js';
+import { getClient, getSupabase } from './_lib/shared.js';
 import { extractJSONObject } from './utils/extractJSON.js';
 
 export default async function handler(req, res) {
@@ -6,17 +6,45 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { reviews } = req.body;
+  const { reviews, business_id } = req.body;
   if (!Array.isArray(reviews) || reviews.length === 0) {
     return res.status(400).json({ error: 'reviews array is required.' });
   }
 
   try {
-    const numbered = reviews.map((r, i) => `${i + 1}. ${r}`).join('\n');
+    // Hard cache check — if business was already analyzed, return cached stats
+    if (business_id) {
+      const supabase = getSupabase();
+      if (supabase) {
+        const { data: biz } = await supabase
+          .from('businesses')
+          .select('analyzed_at, reputation_score, keywords')
+          .eq('id', business_id)
+          .single();
+        const { data: revRows } = await supabase
+          .from('reviews')
+          .select('id, sentiment')
+          .eq('business_id', business_id)
+          .not('sentiment', 'is', null);
+        if (biz?.analyzed_at && revRows && revRows.length > 0) {
+          console.log('[/api/analyze-reviews] cache hit for', business_id);
+          const sentimentCounts = { positive: 0, negative: 0, neutral: 0 };
+          const reviewSentiments = revRows.map(r => { sentimentCounts[r.sentiment] = (sentimentCounts[r.sentiment] || 0) + 1; return r.sentiment; });
+          return res.json({
+            sentimentCounts,
+            reputationScore: biz.reputation_score ?? 0,
+            topKeywords: biz.keywords ?? [],
+            reviewSentiments,
+            cached: true,
+          });
+        }
+      }
+    }
+    const numbered = reviews.map((r, i) => `${i + 1}. ${(r.review_text || r || '').substring(0, 150)}`).join('\n');
 
     const response = await getClient().messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 400,
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 800,
       system: 'You are a review analysis engine. Return only valid JSON — no markdown, no explanation, no code fences.',
       messages: [{
         role: 'user',

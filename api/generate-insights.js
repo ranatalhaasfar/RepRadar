@@ -1,4 +1,4 @@
-import { getClient } from './_lib/shared.js';
+import { getClient, getSupabase } from './_lib/shared.js';
 import { extractJSONObject } from './utils/extractJSON.js';
 
 export default async function handler(req, res) {
@@ -6,17 +6,32 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { businessName, businessType, reviews } = req.body;
+  const { businessName, businessType, reviews, business_id } = req.body;
   if (!Array.isArray(reviews) || reviews.length === 0) {
     return res.status(400).json({ error: 'reviews array is required.' });
   }
 
   try {
-    const sample = reviews.slice(0, 20).join('\n');
+    // Hard cache check — return existing insights from Supabase if available
+    if (business_id) {
+      const supabase = getSupabase();
+      if (supabase) {
+        const { data: cached } = await supabase
+          .from('insights')
+          .select('*')
+          .eq('business_id', business_id)
+          .order('created_at', { ascending: true });
+        if (cached && cached.length > 0) {
+          console.log('[/api/generate-insights] cache hit for', business_id);
+          return res.json({ insights: cached, cached: true });
+        }
+      }
+    }
+    const sample = reviews.slice(0, 20).map(r => (r.review_text || r || '').substring(0, 150)).join('\n');
 
     const response = await getClient().messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1000,
+      max_tokens: 2000,
       system: 'You are a business intelligence engine. Return only valid JSON — no markdown, no explanation, no code fences.',
       messages: [{
         role: 'user',

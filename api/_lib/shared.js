@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { createClient } from '@supabase/supabase-js';
 
 // ── Lazy Anthropic client ──────────────────────────────────────────────────
 
@@ -11,6 +12,19 @@ export function getClient() {
     _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   }
   return _client;
+}
+
+// ── Lazy Supabase server client ────────────────────────────────────────────
+
+let _supabase = null;
+export function getSupabase() {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) return null; // cache disabled if not configured
+    _supabase = createClient(url, key);
+  }
+  return _supabase;
 }
 
 // ── Tone descriptions ──────────────────────────────────────────────────────
