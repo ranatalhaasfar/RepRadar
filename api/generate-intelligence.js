@@ -10,6 +10,16 @@ function sanitizeText(text) {
     .trim()
 }
 
+function getSeverity(mentionCount, trend, trend_pct) {
+  let level = mentionCount >= 10 ? 'critical' : mentionCount >= 8 ? 'serious' : mentionCount >= 5 ? 'moderate' : 'minor'
+  // Escalate if trending worsening 20%+
+  if (trend === 'worsening' && trend_pct >= 20) {
+    if (level === 'moderate') level = 'serious'
+    else if (level === 'serious') level = 'critical'
+  }
+  return level
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -37,16 +47,23 @@ export default async function handler(req, res) {
       const sevenDays = 7 * 24 * 60 * 60 * 1000;
       if (age < sevenDays) {
         console.log('[/api/generate-intelligence] cache hit for', business_id);
-        // Normalize cached row — DB only stores a subset of fields; fill in safe defaults
-        // for anything missing so the frontend never gets undefined arrays.
+        const generatedAt = cached.generated_at;
+        const staleAfter = new Date(new Date(generatedAt).getTime() + 3 * 24 * 60 * 60 * 1000).toISOString();
+
+        // Normalize cached row — fill in safe defaults for anything missing
         const normalized = {
           ...cached,
           problems:            Array.isArray(cached.problems)            ? cached.problems            : [],
           competitor_analysis: Array.isArray(cached.competitor_analysis) ? cached.competitor_analysis : [],
           week_buckets:        Array.isArray(cached.week_buckets)        ? cached.week_buckets        : [],
-          total_reviews:       cached.total_reviews  ?? 0,
+          total_reviews:       cached.total_reviews   ?? 0,
           potential_score:     cached.potential_score ?? cached.health_score ?? 0,
           health_score:        cached.health_score    ?? 0,
+          health_breakdown:    cached.health_breakdown ?? null,
+          crisis_status:       cached.crisis_status   ?? 'healthy',
+          unanswered_count:    cached.unanswered_count ?? 0,
+          oldest_unanswered:   cached.oldest_unanswered ?? null,
+          stale_after:         staleAfter,
           weekly_brief: cached.weekly_brief ? {
             ...cached.weekly_brief,
             action_items: Array.isArray(cached.weekly_brief.action_items) ? cached.weekly_brief.action_items : [],
@@ -69,7 +86,7 @@ export default async function handler(req, res) {
     // ── Fetch reviews ──────────────────────────────────────────────────────
     const { data: reviewRows, error: revErr } = await supabase
       .from('reviews')
-      .select('review_text, rating, sentiment, reviewed_at')
+      .select('review_text, rating, sentiment, reviewed_at, reviewer_name')
       .eq('business_id', business_id)
       .order('reviewed_at', { ascending: false });
 
@@ -91,27 +108,35 @@ export default async function handler(req, res) {
       for (const comp of competitors) {
         const { data: compRevs } = await supabase
           .from('reviews')
-          .select('review_text, sentiment')
+          .select('review_text, sentiment, rating')
           .eq('business_id', comp.id)
           .limit(100);
         competitorData.push({ ...comp, reviews: compRevs ?? [] });
       }
     }
 
-    // ── Build weekly buckets (last 8 weeks) from reviews ──────────────────
+    // ── Build weekly buckets (last 8 weeks) ───────────────────────────────
     const now = new Date();
     const weekBuckets = Array.from({ length: 8 }, (_, i) => {
       const start = new Date(now);
       start.setDate(start.getDate() - (7 - i) * 7);
       const end = new Date(start);
       end.setDate(end.getDate() + 7);
-      return { label: `W${i + 1}`, start, end, negative: 0, total: 0 };
+      const monthAbbr = start.toLocaleDateString('en-US', { month: 'short' });
+      const day = start.getDate();
+      return { label: `${monthAbbr} ${day}`, start, end, negative: 0, total: 0 };
     });
 
-    // ── Haiku call: detect top complaints + weekly brief ──────────────────
+    // ── Sonnet call: detect top complaints + weekly brief ─────────────────
+    // Send richer context: rating, date, sentiment for each review
     const sample = reviews
-      .slice(0, 80)
-      .map(r => `[${r.sentiment ?? 'unknown'}] ${sanitizeText(r.review_text).substring(0, 100)}`)
+      .slice(0, 100)
+      .map(r => {
+        const date = r.reviewed_at ? new Date(r.reviewed_at).toISOString().split('T')[0] : 'unknown';
+        const rating = r.rating !== null && r.rating !== undefined ? `${r.rating}★` : 'no-rating';
+        const sentiment = r.sentiment ?? 'unknown';
+        return `[${date}|${rating}|${sentiment}] ${sanitizeText(r.review_text).substring(0, 150)}`;
+      })
       .join('\n');
 
     const weekStr = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -119,34 +144,39 @@ export default async function handler(req, res) {
     const safeType = sanitizeText(business_type);
 
     const response = await getClient().messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1200,
-      system: 'You are a business intelligence analyst. Return ONLY valid JSON — no markdown, no code fences.',
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2000,
+      system: 'You are a senior business intelligence analyst specializing in reputation management. Return ONLY valid JSON — no markdown, no code fences, no commentary.',
       messages: [{
         role: 'user',
         content:
-          `Analyze these customer reviews for "${safeName}" (${safeType}).\n\n` +
+          `Analyze these customer reviews for "${safeName}" (${safeType}) for the week of ${weekStr}.\n\n` +
+          `Each review line is formatted as: [date|rating|sentiment] text\n\n` +
           `Return a JSON object with EXACTLY this shape:\n` +
           `{\n` +
           `  "problems": [\n` +
           `    {\n` +
-          `      "name": "string — complaint topic",\n` +
-          `      "keywords": ["array", "of", "trigger", "words"],\n` +
+          `      "name": "Specific complaint name based on actual review language",\n` +
+          `      "keywords": ["topic", "words", "customers", "use"],\n` +
+          `      "negativeIndicators": ["smell", "bad", "worst", "never again", "rotten", "disgusting"],\n` +
           `      "trend": "worsening" | "improving" | "stable",\n` +
-          `      "trend_pct": 0\n` +
+          `      "trend_pct": 15,\n` +
+          `      "specific_action": "Specific actionable advice for this business, not generic platitudes"\n` +
           `    }\n` +
           `  ],\n` +
-          `  "weekly_narrative": "3-5 sentence summary of the business this week based on reviews",\n` +
-          `  "top_priority": "one bold action item for this week",\n` +
-          `  "biggest_win": "one positive highlight from this week",\n` +
-          `  "action_items": ["action 1", "action 2", "action 3"]\n` +
+          `  "weekly_narrative": "A full paragraph written like a business consultant delivering a frank assessment of what the reviews reveal this week. Include specific patterns, risks, and opportunities.",\n` +
+          `  "top_priority": "Single most important action this week — be specific",\n` +
+          `  "biggest_win": "One positive highlight from this week's reviews",\n` +
+          `  "action_items": ["specific action 1", "specific action 2", "specific action 3"]\n` +
           `}\n\n` +
           `Rules:\n` +
-          `- Identify 3-5 specific problems customers complain about\n` +
-          `- keywords: 4-8 lowercase words customers use for this problem\n` +
-          `- trend: based on whether recent reviews mention it more or less\n` +
+          `- Identify 3-6 specific problems customers complain about in negative reviews\n` +
+          `- keywords: 4-10 lowercase words/phrases customers use to describe this problem\n` +
+          `- negativeIndicators: 4-8 words that signal this specific complaint is negative (not just topic words)\n` +
+          `- trend: based on whether recent reviews (last 2 weeks) mention it more or less than older reviews\n` +
           `- trend_pct: estimated percentage change (0-50)\n` +
-          `- Week of ${weekStr}\n\n` +
+          `- specific_action: must be tailored to this business type and problem, not generic\n` +
+          `- weekly_narrative: write like a consultant — frank, specific, actionable\n\n` +
           `Reviews:\n${sample}`,
       }],
     });
@@ -161,19 +191,45 @@ export default async function handler(req, res) {
 
     const problems = (aiData.problems || []).map((p, idx) => {
       const keywords = (p.keywords || []).map(k => k.toLowerCase());
-      const matchedIndices = lowerReviews
-        .map((text, i) => ({ i, text }))
-        .filter(({ text }) => keywords.some(kw => text.includes(kw)))
-        .map(({ i }) => i);
+      const negativeIndicators = (p.negativeIndicators || []).map(ni => ni.toLowerCase());
+
+      // Match reviews that are BOTH about the topic AND negative
+      const matchResults = lowerReviews
+        .map((text, i) => ({ i, text, review: reviews[i] }))
+        .filter(({ text, review }) => {
+          const hasKeyword = keywords.some(kw => text.includes(kw))
+          if (!hasKeyword) return false
+          // Must also be negative: either has negative indicator words, or sentiment=negative, or rating<=2
+          const hasNegativeIndicator = negativeIndicators.some(ni => text.includes(ni))
+          const isNegativeSentiment = review.sentiment === 'negative'
+          const isLowRating = review.rating !== null && review.rating !== undefined && review.rating <= 2
+          return hasNegativeIndicator || isNegativeSentiment || isLowRating
+        })
+
+      const matchedIndices = matchResults.map(({ i }) => i)
+
+      // Build match_reasons: which keyword and indicator matched for each review
+      const match_reasons = matchResults.map(({ i, text }) => {
+        const matchedKeyword = keywords.find(kw => text.includes(kw)) || ''
+        const matchedIndicator = negativeIndicators.find(ni => text.includes(ni)) || null
+        return { index: i, matchedKeyword, matchedIndicator }
+      })
 
       const matched = matchedIndices.map(i => reviews[i]);
+
+      // Snippets: prefer negative or low-rated reviews
       const snippets = matched
         .filter(r => (r.review_text || '').trim().length > 20)
+        .sort((a, b) => {
+          const aScore = (a.rating || 5) + (a.sentiment === 'negative' ? -10 : 0)
+          const bScore = (b.rating || 5) + (b.sentiment === 'negative' ? -10 : 0)
+          return aScore - bScore
+        })
         .slice(0, 3)
         .map(r => (r.review_text || '').substring(0, 120).trim());
 
-      // Weekly complaint volume for trend chart
-      const weeklyVolume = weekBuckets.map(bucket => {
+      // Weekly complaint volume for trend chart (mention_timeline = 8 week buckets)
+      const mention_timeline = weekBuckets.map(bucket => {
         return matched.filter(r => {
           if (!r.reviewed_at) return false;
           const d = new Date(r.reviewed_at);
@@ -181,19 +237,57 @@ export default async function handler(req, res) {
         }).length;
       });
 
+      // first_seen: earliest matched review date
+      const datesOfMatched = matched
+        .filter(r => r.reviewed_at)
+        .map(r => new Date(r.reviewed_at).getTime())
+      const first_seen = datesOfMatched.length > 0
+        ? new Date(Math.min(...datesOfMatched)).toISOString()
+        : null
+
+      // low_star_correlation: how many 1-2 star reviews mention this problem
+      const low_star_correlation = matched.filter(r => r.rating !== null && r.rating !== undefined && r.rating <= 2).length
+
+      const severity = getSeverity(matchedIndices.length, p.trend || 'stable', p.trend_pct || 0)
+
       return {
-        rank:          idx + 1,
-        name:          p.name,
+        rank:               idx + 1,
+        name:               p.name,
         keywords,
-        mention_count: matchedIndices.length,
-        trend:         p.trend || 'stable',
-        trend_pct:     p.trend_pct || 0,
+        negativeIndicators,
+        mention_count:      matchedIndices.length,
+        trend:              p.trend || 'stable',
+        trend_pct:          p.trend_pct || 0,
+        severity,
         snippets,
-        review_indices: matchedIndices.slice(0, 50),
-        weekly_volume:  weeklyVolume,
+        review_indices:     matchedIndices.slice(0, 50),
+        weekly_volume:      mention_timeline,   // keep for chart compatibility
+        mention_timeline,
+        first_seen,
+        low_star_correlation,
+        match_reasons,
+        specific_action:    p.specific_action || '',
       };
     }).sort((a, b) => b.mention_count - a.mention_count)
       .map((p, i) => ({ ...p, rank: i + 1 }));
+
+    // ── Severity-based crisis status ──────────────────────────────────────
+    const criticalProblems = problems.filter(p => p.severity === 'critical')
+    const seriousProblems = problems.filter(p => p.severity === 'serious')
+    const moderateProblems = problems.filter(p => p.severity === 'moderate')
+    let crisis_status = 'healthy'
+    if (criticalProblems.length > 0) crisis_status = 'crisis'
+    else if (seriousProblems.length > 0 || moderateProblems.length >= 2) crisis_status = 'warning'
+
+    // ── Unanswered reviews count ──────────────────────────────────────────
+    // Unanswered = negative reviews (sentiment=negative OR rating<=2) with no tracked response
+    const negativeReviews = reviews.filter(r => r.sentiment === 'negative' || (r.rating !== null && r.rating !== undefined && r.rating <= 2))
+    const unanswered_count = negativeReviews.length
+    // oldest unanswered: sort ascending and take last element (oldest = smallest date value)
+    const oldestNegative = [...negativeReviews]
+      .filter(r => r.reviewed_at)
+      .sort((a, b) => new Date(a.reviewed_at).getTime() - new Date(b.reviewed_at).getTime())
+    const oldest_unanswered = oldestNegative.length > 0 ? oldestNegative[0].reviewed_at : null
 
     // ── Local: competitor weakness analysis ───────────────────────────────
     const competitor_analysis = competitorData.map(comp => {
@@ -208,11 +302,11 @@ export default async function handler(req, res) {
           : 0;
 
         return {
-          problem_name:   prob.name,
-          comp_mentions:  compMentions,
-          my_score_pct:   Math.round((1 - prob.mention_count / Math.max(reviews.length, 1)) * 100),
+          problem_name:    prob.name,
+          comp_mentions:   compMentions,
+          my_score_pct:    Math.round((1 - prob.mention_count / Math.max(reviews.length, 1)) * 100),
           my_positive_pct: Math.round(myPositiveRate * 100),
-          opportunity:    compMentions > 3 && prob.mention_count < compMentions,
+          opportunity:     compMentions > 3 && prob.mention_count < compMentions,
         };
       });
 
@@ -227,21 +321,34 @@ export default async function handler(req, res) {
     // ── Health score ──────────────────────────────────────────────────────
     const totalReviews = reviews.length;
     const positiveCount = reviews.filter(r => r.sentiment === 'positive').length;
-    const negativeCount = reviews.filter(r => r.sentiment === 'negative').length;
     const sentimentScore = totalReviews > 0
       ? Math.round((positiveCount / totalReviews) * 100)
       : 50;
 
-    const criticalProblems = problems.filter(p => p.mention_count > totalReviews * 0.15).length;
-    const healthScore = Math.max(20, Math.min(100,
-      sentimentScore
-      - criticalProblems * 8
-      - (negativeCount / Math.max(totalReviews, 1)) * 20
-    ));
+    // Deductions from problems (up to 5)
+    const deductions = problems.slice(0, 5).map(p => ({
+      name: p.name,
+      points: -(p.severity === 'critical' ? 25 : p.severity === 'serious' ? 20 : p.severity === 'moderate' ? 15 : 5),
+      severity: p.severity,
+      trend: p.trend,
+    }))
 
-    const potentialScore = Math.min(100, Math.round(healthScore + problems.slice(0, 3).reduce((acc, p) => {
-      return acc + Math.min(8, p.mention_count / Math.max(totalReviews, 1) * 30);
-    }, 0)));
+    const totalDeduction = deductions.reduce((sum, d) => sum + d.points, 0)
+    const healthScore = Math.max(20, Math.min(100, sentimentScore + totalDeduction))
+
+    const potentialScore = Math.min(100, healthScore + 50)
+
+    // score_if_fixed projections
+    const top1Deduction = deductions.length > 0 ? Math.abs(deductions[0].points) : 0
+    const top3Deduction = deductions.slice(0, 3).reduce((sum, d) => sum + Math.abs(d.points), 0)
+
+    const healthBreakdown = {
+      base: sentimentScore,
+      deductions,
+      boosts: [],
+      score_if_fixed_top1: Math.min(100, healthScore + top1Deduction),
+      score_if_fixed_top3: Math.min(100, healthScore + top3Deduction),
+    }
 
     // ── Weekly stats ──────────────────────────────────────────────────────
     const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -262,6 +369,9 @@ export default async function handler(req, res) {
     };
 
     const week_label = `Week of ${weekStr}`;
+    const generated_at = new Date().toISOString()
+    const stale_after = new Date(new Date(generated_at).getTime() + 3 * 24 * 60 * 60 * 1000).toISOString()
+
     const report = {
       business_id,
       problems,
@@ -272,27 +382,36 @@ export default async function handler(req, res) {
         narrative:    aiData.weekly_narrative || '',
         top_priority: aiData.top_priority || '',
         biggest_win:  aiData.biggest_win || '',
-        action_items: aiData.action_items || [],
+        action_items: Array.isArray(aiData.action_items) ? aiData.action_items : [],
       },
       health_score:      Math.round(healthScore),
+      health_breakdown:  healthBreakdown,
       potential_score:   potentialScore,
       total_reviews:     totalReviews,
       week_buckets:      weekBuckets.map(b => b.label),
-      generated_at:      new Date().toISOString(),
+      crisis_status,
+      unanswered_count,
+      oldest_unanswered,
+      generated_at,
+      stale_after,
+      cached: false,
     };
 
-    // ── Persist to Supabase ───────────────────────────────────────────────
-    await supabase.from('intelligence_reports').delete().eq('business_id', business_id);
-    await supabase.from('intelligence_reports').insert({
-      business_id,
-      problems:             report.problems,
-      competitor_analysis:  report.competitor_analysis,
-      weekly_brief:         report.weekly_brief,
-      health_score:         report.health_score,
-      potential_score:      report.potential_score,
-      total_reviews:        report.total_reviews,
-      week_buckets:         report.week_buckets,
-    }).select();
+    // ── Persist to Supabase (safe — only known columns) ───────────────────
+    try {
+      await supabase.from('intelligence_reports').delete().eq('business_id', business_id)
+      const { error: insertErr } = await supabase.from('intelligence_reports').insert({
+        business_id,
+        problems:             report.problems,
+        competitor_analysis:  report.competitor_analysis,
+        weekly_brief:         report.weekly_brief,
+        health_score:         report.health_score,
+        generated_at:         report.generated_at,
+      })
+      if (insertErr) console.error('[intelligence] DB insert error:', insertErr.message)
+    } catch (e) {
+      console.error('[intelligence] DB insert failed:', e.message)
+    }
 
     return res.json(report);
   } catch (error) {
