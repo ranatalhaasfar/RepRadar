@@ -159,7 +159,7 @@ export default async function handler(req, res) {
           `      "name": "Specific complaint name based on actual review language",\n` +
           `      "keywords": ["topic", "words", "customers", "use"],\n` +
           `      "negativeIndicators": ["smell", "bad", "worst", "never again", "rotten", "disgusting"],\n` +
-          `      "trend": "worsening" | "improving" | "stable",\n` +
+          `      "trend": "worsening",\n` +
           `      "trend_pct": 15,\n` +
           `      "specific_action": "Specific actionable advice for this business, not generic platitudes"\n` +
           `    }\n` +
@@ -173,7 +173,7 @@ export default async function handler(req, res) {
           `- Identify 3-6 specific problems customers complain about in negative reviews\n` +
           `- keywords: 4-10 lowercase words/phrases customers use to describe this problem\n` +
           `- negativeIndicators: 4-8 words that signal this specific complaint is negative (not just topic words)\n` +
-          `- trend: based on whether recent reviews (last 2 weeks) mention it more or less than older reviews\n` +
+          `- trend: must be exactly one of: "worsening", "improving", or "stable"\n` +
           `- trend_pct: estimated percentage change (0-50)\n` +
           `- specific_action: must be tailored to this business type and problem, not generic\n` +
           `- weekly_narrative: write like a consultant — frank, specific, actionable\n\n` +
