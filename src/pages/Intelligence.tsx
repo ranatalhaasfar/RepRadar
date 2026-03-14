@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useAppStore } from '../store/appStore'
-import jsPDF from 'jspdf'
+
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -1024,7 +1024,7 @@ function PageHeader({ businessName, report, generating, onGenerate, onDownload }
           {!report && <p className="text-xs text-gray-500">Premium intelligence briefing</p>}
         </div>
       </div>
-      <div className="flex gap-2 flex-wrap shrink-0">
+      <div className="flex gap-2 flex-wrap shrink-0 no-print">
         {onDownload && report && (
           <button
             onClick={onDownload}
@@ -1085,131 +1085,10 @@ function normalizeReport(raw: Record<string, unknown>): IntelReport {
   }
 }
 
-// ── PDF Export ─────────────────────────────────────────────────────────────
+// ── Print / Export ─────────────────────────────────────────────────────────
 
-function downloadPDF(report: IntelReport, businessName: string) {
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-  const pageW = doc.internal.pageSize.getWidth()
-  const pageH = doc.internal.pageSize.getHeight()
-  const margin = 15
-  const contentW = pageW - margin * 2
-  let y = margin
-
-  function checkPage(needed = 8) {
-    if (y + needed > pageH - margin) {
-      doc.addPage()
-      y = margin
-    }
-  }
-
-  function addLine(text: string, size = 10, style: 'normal' | 'bold' = 'normal', color = '#1a1a2e') {
-    checkPage()
-    doc.setFontSize(size)
-    doc.setFont('helvetica', style)
-    doc.setTextColor(color)
-    const wrapped = doc.splitTextToSize(text, contentW)
-    doc.text(wrapped, margin, y)
-    y += (wrapped.length * size * 0.4) + 2
-  }
-
-  function addSection(title: string) {
-    checkPage(12)
-    y += 3
-    doc.setFillColor('#6d28d9')
-    doc.rect(margin, y - 4, contentW, 7, 'F')
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor('#ffffff')
-    doc.text(title, margin + 2, y)
-    y += 6
-  }
-
-  function addDivider() {
-    checkPage(4)
-    doc.setDrawColor('#e2e8f0')
-    doc.line(margin, y, margin + contentW, y)
-    y += 4
-  }
-
-  // ── Header ──
-  doc.setFillColor('#0f172a')
-  doc.rect(0, 0, pageW, 30, 'F')
-  doc.setFontSize(16)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor('#ffffff')
-  doc.text('Intelligence Report', margin, 12)
-  doc.setFontSize(10)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor('#94a3b8')
-  doc.text(businessName, margin, 20)
-  doc.text(`Generated ${new Date(report.generated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`, margin, 26)
-  y = 38
-
-  // ── Summary row ──
-  const crisisColor = report.crisis_status === 'crisis' ? '#dc2626' : report.crisis_status === 'warning' ? '#d97706' : '#16a34a'
-  addLine(`Health Score: ${report.health_score}/100   |   Status: ${report.crisis_status.toUpperCase()}   |   Reviews Analysed: ${report.total_reviews}`, 10, 'bold', crisisColor)
-  addDivider()
-
-  // ── Weekly Brief ──
-  addSection('WEEKLY BRIEF')
-  if (report.weekly_brief.narrative) addLine(report.weekly_brief.narrative, 9, 'normal', '#374151')
-  y += 2
-  addLine(`Priority: ${report.weekly_brief.top_priority}`, 9, 'bold', '#1f2937')
-  addLine(`Biggest Win: ${report.weekly_brief.biggest_win}`, 9, 'normal', '#374151')
-  if (report.weekly_brief.action_items.length) {
-    y += 2
-    addLine('Action Items:', 9, 'bold', '#1f2937')
-    for (const item of report.weekly_brief.action_items) {
-      addLine(`  • ${item}`, 9, 'normal', '#374151')
-    }
-  }
-
-  // ── Top Problems ──
-  addSection('TOP PROBLEMS')
-  for (const p of report.problems) {
-    checkPage(20)
-    const severityColor = p.severity === 'critical' || p.severity === 'serious' ? '#dc2626'
-      : p.severity === 'moderate' ? '#d97706' : '#6b7280'
-    addLine(`#${p.rank} ${p.name}`, 10, 'bold', '#111827')
-    addLine(`Severity: ${p.severity.toUpperCase()}   Mentions: ${p.mention_count}   Trend: ${p.trend} (${p.trend_pct}%)`, 9, 'normal', severityColor)
-    if (p.first_seen) addLine(`First seen: ${weeksAgo(p.first_seen)}`, 9, 'normal', '#6b7280')
-    if (p.low_star_correlation > 0) addLine(`Linked to ${p.low_star_correlation} low-star reviews`, 9, 'normal', '#6b7280')
-    if (p.specific_action) addLine(`Action: ${p.specific_action}`, 9, 'bold', '#1d4ed8')
-    for (const s of p.snippets.slice(0, 2)) {
-      addLine(`"${s}"`, 8, 'normal', '#6b7280')
-    }
-    y += 3
-  }
-
-  // ── Health Score Breakdown ──
-  if (report.health_breakdown) {
-    addSection('HEALTH SCORE BREAKDOWN')
-    for (const d of report.health_breakdown.deductions) {
-      addLine(`${d.name}: −${d.points} pts  (${d.severity}, ${d.trend})`, 9, 'normal', '#374151')
-    }
-    y += 2
-    addLine(`Fix top issue → ${report.health_breakdown.score_if_fixed_top1}/100`, 9, 'bold', '#16a34a')
-    addLine(`Fix top 3 issues → ${report.health_breakdown.score_if_fixed_top3}/100`, 9, 'bold', '#16a34a')
-  }
-
-  // ── Unanswered Reviews ──
-  addSection('UNANSWERED REVIEWS')
-  addLine(`${report.unanswered_count} negative reviews without a response`, 9, 'normal', '#374151')
-  if (report.oldest_unanswered) addLine(`Oldest unanswered: ${relativeTime(report.oldest_unanswered)}`, 9, 'normal', '#6b7280')
-
-  // ── Footer on last page ──
-  const totalPages = (doc.internal as unknown as { getNumberOfPages: () => number }).getNumberOfPages()
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i)
-    doc.setFontSize(8)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor('#9ca3af')
-    doc.text(`RepRadar Intelligence  ·  ${businessName}  ·  Page ${i} of ${totalPages}`, margin, pageH - 6)
-  }
-
-  const slug = businessName.toLowerCase().replace(/\s+/g, '-')
-  const date = new Date().toISOString().slice(0, 10)
-  doc.save(`intelligence-report-${slug}-${date}.pdf`)
+function downloadPDF(_report: IntelReport, _businessName: string) {
+  window.print()
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
@@ -1486,7 +1365,7 @@ export default function Intelligence() {
       />
 
       {/* Download CTA at bottom */}
-      <div className="card p-5 flex items-center justify-between gap-4">
+      <div className="card p-5 flex items-center justify-between gap-4 no-print">
         <div>
           <p className="text-sm font-semibold text-gray-200">Download this report</p>
           <p className="text-xs text-gray-500 mt-0.5">Save a text copy of this intelligence briefing</p>
