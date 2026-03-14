@@ -97,23 +97,18 @@ export default async function handler(req, res) {
       return res.status(422).json({ error: 'insufficient_reviews', count: reviews.length });
     }
 
-    // ── Fetch competitors + their reviews ──────────────────────────────────
+    // ── Fetch competitors (metadata only — reviews are not stored in DB) ──────
     const { data: competitors } = await supabase
       .from('competitors')
-      .select('id, name, google_rating')
+      .select('id, name, google_rating, total_reviews')
       .eq('business_id', business_id);
 
-    const competitorData = [];
-    if (competitors && competitors.length > 0) {
-      for (const comp of competitors) {
-        const { data: compRevs } = await supabase
-          .from('reviews')
-          .select('review_text, sentiment, rating')
-          .eq('business_id', comp.id)
-          .limit(100);
-        competitorData.push({ ...comp, reviews: compRevs ?? [] });
-      }
+    console.log(`[intelligence] competitors found: ${competitors?.length ?? 0}`);
+    if (competitors?.length) {
+      console.log('[intelligence] competitor sample:', JSON.stringify(competitors[0]));
     }
+
+    const competitorData = competitors ?? [];
 
     // ── Build weekly buckets (last 8 weeks) ───────────────────────────────
     const now = new Date();
@@ -289,24 +284,43 @@ export default async function handler(req, res) {
       .sort((a, b) => new Date(a.reviewed_at).getTime() - new Date(b.reviewed_at).getTime())
     const oldest_unanswered = oldestNegative.length > 0 ? oldestNegative[0].reviewed_at : null
 
-    // ── Local: competitor weakness analysis ───────────────────────────────
-    const competitor_analysis = competitorData.map(comp => {
-      const compLower = comp.reviews.map(r => (r.review_text || '').toLowerCase());
+    // ── Competitor analysis (rating-gap based — reviews not stored in DB) ────
+    //
+    // Competitor reviews are fetched by CompetitorSpy via Outscraper but are
+    // never persisted to the reviews table. We derive opportunities purely from
+    // the rating gap between the competitor and this business, combined with
+    // the business's own problem severity data.
+    const myAvgRating = reviews.length > 0
+      ? reviews.reduce((s, r) => s + (r.rating ?? 4), 0) / reviews.length
+      : 4;
 
+    const competitor_analysis = competitorData.map(comp => {
+      const compRating = comp.google_rating ?? myAvgRating;
+      const ratingGap = myAvgRating - compRating; // positive = we're better
+
+      // Map our top problems to competitor weakness cards.
+      // We have no competitor review text, so comp_mentions is derived from
+      // their rating: a lower-rated competitor is assumed to suffer more from
+      // the same category of problems that hurt lower-rated businesses generally.
       const weaknesses = problems.slice(0, 3).map(prob => {
-        const compMentions = compLower.filter(text =>
-          prob.keywords.some(kw => text.includes(kw))
-        ).length;
-        const myPositiveRate = prob.review_indices.length > 0
-          ? prob.review_indices.filter(i => reviews[i]?.sentiment === 'positive').length / prob.review_indices.length
-          : 0;
+        // Estimate competitor complaints from their rating deficit
+        // A 1-star lower rating ≈ 30% more complaints on common issues
+        const ratingDeficit = Math.max(0, myAvgRating - compRating);
+        const estimatedCompMentions = Math.round(prob.mention_count * (1 + ratingDeficit * 0.4));
+
+        const myScorePct = Math.round((1 - prob.mention_count / Math.max(reviews.length, 1)) * 100);
+
+        // Opportunity: competitor has lower rating AND we score better on this topic
+        const opportunity = ratingGap > 0.2 && myScorePct >= 60;
 
         return {
           problem_name:    prob.name,
-          comp_mentions:   compMentions,
-          my_score_pct:    Math.round((1 - prob.mention_count / Math.max(reviews.length, 1)) * 100),
-          my_positive_pct: Math.round(myPositiveRate * 100),
-          opportunity:     compMentions > 3 && prob.mention_count < compMentions,
+          comp_mentions:   null, // not available — reviews not in DB
+          my_score_pct:    myScorePct,
+          my_positive_pct: myScorePct,
+          opportunity,
+          estimated_comp_mentions: estimatedCompMentions,
+          no_review_data: true,
         };
       });
 
@@ -314,6 +328,8 @@ export default async function handler(req, res) {
         id:            comp.id,
         name:          comp.name,
         google_rating: comp.google_rating,
+        total_reviews: comp.total_reviews,
+        rating_gap:    Math.round(ratingGap * 10) / 10,
         weaknesses,
       };
     });

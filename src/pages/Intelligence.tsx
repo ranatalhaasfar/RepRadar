@@ -32,17 +32,21 @@ type Problem = {
 }
 
 type CompetitorWeakness = {
-  problem_name:    string
-  comp_mentions:   number
-  my_score_pct:    number
-  my_positive_pct: number
-  opportunity:     boolean
+  problem_name:             string
+  comp_mentions:            number | null
+  my_score_pct:             number
+  my_positive_pct:          number
+  opportunity:              boolean
+  no_review_data?:          boolean
+  estimated_comp_mentions?: number
 }
 
 type CompetitorAnalysis = {
   id:            string
   name:          string
   google_rating: number | null
+  total_reviews?: number | null
+  rating_gap?:   number
   weaknesses:    CompetitorWeakness[]
 }
 
@@ -582,6 +586,14 @@ function CompetitorSection({ competitors, problems }: { competitors: CompetitorA
                 )}
               </div>
             </div>
+            {comp.rating_gap != null && (
+              <p className="pl-9 text-[11px] text-gray-500">
+                Rating gap: <span className={comp.rating_gap > 0 ? 'text-emerald-400' : comp.rating_gap < 0 ? 'text-red-400' : 'text-gray-400'}>
+                  {comp.rating_gap > 0 ? '+' : ''}{comp.rating_gap} stars vs you
+                </span>
+                {comp.total_reviews != null && <> · {comp.total_reviews.toLocaleString()} reviews</>}
+              </p>
+            )}
             <div className="pl-9 space-y-3">
               {(comp.weaknesses ?? []).map(w => {
                 const relatedProblem = problems.find(p => p.name === w.problem_name)
@@ -589,9 +601,16 @@ function CompetitorSection({ competitors, problems }: { competitors: CompetitorA
                   <div key={w.problem_name} className="bg-[#080d1a] border border-[#1a2540] rounded-xl p-3 space-y-2">
                     <div className="flex items-start justify-between gap-2 flex-wrap">
                       <div>
-                        <p className="text-xs text-gray-300">
-                          <span className="font-semibold text-orange-400">{w.comp_mentions}</span> {w.problem_name} complaints
-                        </p>
+                        <p className="text-xs text-gray-300 font-medium">{w.problem_name}</p>
+                        {w.no_review_data ? (
+                          <p className="text-[11px] text-gray-600 mt-0.5 italic">
+                            Competitor reviews not in database — re-run Competitor Spy to fetch them
+                          </p>
+                        ) : (
+                          <p className="text-[11px] text-gray-500 mt-0.5">
+                            <span className="font-semibold text-orange-400">{w.comp_mentions}</span> complaints detected in their reviews
+                          </p>
+                        )}
                         <p className="text-[11px] text-gray-500 mt-0.5">
                           Your score on this topic: <span className={`font-semibold ${w.my_score_pct >= 75 ? 'text-emerald-400' : w.my_score_pct >= 50 ? 'text-amber-400' : 'text-red-400'}`}>{w.my_score_pct}%</span>
                         </p>
@@ -602,9 +621,14 @@ function CompetitorSection({ competitors, problems }: { competitors: CompetitorA
                         </span>
                       )}
                     </div>
-                    {w.opportunity && (
+                    {w.opportunity && !w.no_review_data && (
                       <p className="text-[11px] text-emerald-400/80">
                         OPPORTUNITY: You are winning on {w.problem_name} — {w.comp_mentions} competitor complaints vs your {w.my_score_pct}% satisfaction rate
+                      </p>
+                    )}
+                    {w.opportunity && w.no_review_data && comp.rating_gap != null && comp.rating_gap > 0 && (
+                      <p className="text-[11px] text-emerald-400/80">
+                        OPPORTUNITY: You are rated {comp.rating_gap} stars higher — you likely outperform them on {w.problem_name}
                       </p>
                     )}
                     {relatedProblem?.specific_action && w.opportunity && (
