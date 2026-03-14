@@ -138,14 +138,30 @@ export default async function handler(req, res) {
     const safeName = sanitizeText(business_name);
     const safeType = sanitizeText(business_type);
 
+    // Build competitor context block for the prompt
+    const hasCompetitors = competitorData.length > 0;
+    const competitorBlock = hasCompetitors
+      ? '\n\nCOMPETITOR LANDSCAPE:\n' +
+        competitorData.map(c =>
+          `- ${c.name}: ${c.google_rating != null ? c.google_rating + ' stars' : 'rating unknown'}` +
+          `${c.total_reviews != null ? ', ' + c.total_reviews + ' reviews' : ''}`
+        ).join('\n')
+      : '';
+
+    const myAvgRatingStr = reviews.length > 0
+      ? (reviews.reduce((s, r) => s + (r.rating ?? 4), 0) / reviews.length).toFixed(1)
+      : null;
+
     const response = await getClient().messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
+      max_tokens: 2500,
       system: 'You are a senior business intelligence analyst specializing in reputation management. Return ONLY valid JSON — no markdown, no code fences, no commentary.',
       messages: [{
         role: 'user',
         content:
-          `Analyze these customer reviews for "${safeName}" (${safeType}) for the week of ${weekStr}.\n\n` +
+          `Analyze these customer reviews for "${safeName}" (${safeType}) for the week of ${weekStr}.\n` +
+          `This business has an average rating of ${myAvgRatingStr ?? 'unknown'} stars.` +
+          competitorBlock + '\n\n' +
           `Each review line is formatted as: [date|rating|sentiment] text\n\n` +
           `Return a JSON object with EXACTLY this shape:\n` +
           `{\n` +
@@ -162,8 +178,21 @@ export default async function handler(req, res) {
           `  "weekly_narrative": "A full paragraph written like a business consultant delivering a frank assessment of what the reviews reveal this week. Include specific patterns, risks, and opportunities.",\n` +
           `  "top_priority": "Single most important action this week — be specific",\n` +
           `  "biggest_win": "One positive highlight from this week's reviews",\n` +
-          `  "action_items": ["specific action 1", "specific action 2", "specific action 3"]\n` +
-          `}\n\n` +
+          `  "action_items": ["specific action 1", "specific action 2", "specific action 3"]` +
+          (hasCompetitors
+            ? `,\n  "competitor_insights": [\n` +
+              `    {\n` +
+              `      "name": "Exact competitor name from the list above",\n` +
+              `      "rating": 4.4,\n` +
+              `      "verdict": "one of: winning, losing, tied",\n` +
+              `      "gap_summary": "1 sentence: are you ahead or behind and by how much — use specific numbers",\n` +
+              `      "your_advantages": ["specific thing you do better based on YOUR reviews", "another advantage"],\n` +
+              `      "your_vulnerabilities": ["specific area where YOUR reviews show weakness that they could exploit"],\n` +
+              `      "strategic_move": "One concrete action to take to win customers away from this specific competitor"\n` +
+              `    }\n` +
+              `  ]\n` +
+              `}`
+            : '\n}') + '\n\n' +
           `Rules:\n` +
           `- Identify 3-6 specific problems customers complain about in negative reviews\n` +
           `- keywords: 4-10 lowercase words/phrases customers use to describe this problem\n` +
@@ -171,8 +200,14 @@ export default async function handler(req, res) {
           `- trend: must be exactly one of: "worsening", "improving", or "stable"\n` +
           `- trend_pct: estimated percentage change (0-50)\n` +
           `- specific_action: must be tailored to this business type and problem, not generic\n` +
-          `- weekly_narrative: write like a consultant — frank, specific, actionable\n\n` +
-          `Reviews:\n${sample}`,
+          `- weekly_narrative: write like a consultant — frank, specific, actionable\n` +
+          (hasCompetitors
+            ? `- competitor_insights: one entry per competitor listed above\n` +
+              `- verdict: "winning" if your rating is higher, "losing" if theirs is higher, "tied" if within 0.2\n` +
+              `- your_advantages/vulnerabilities: based on YOUR actual review themes, not generic\n` +
+              `- strategic_move: specific, actionable, tailored to this business type and competitor\n`
+            : '') +
+          `\nReviews:\n${sample}`,
       }],
     });
 
@@ -284,53 +319,37 @@ export default async function handler(req, res) {
       .sort((a, b) => new Date(a.reviewed_at).getTime() - new Date(b.reviewed_at).getTime())
     const oldest_unanswered = oldestNegative.length > 0 ? oldestNegative[0].reviewed_at : null
 
-    // ── Competitor analysis (rating-gap based — reviews not stored in DB) ────
-    //
-    // Competitor reviews are fetched by CompetitorSpy via Outscraper but are
-    // never persisted to the reviews table. We derive opportunities purely from
-    // the rating gap between the competitor and this business, combined with
-    // the business's own problem severity data.
+    // ── Competitor analysis — merge AI insights with metadata ─────────────
     const myAvgRating = reviews.length > 0
       ? reviews.reduce((s, r) => s + (r.rating ?? 4), 0) / reviews.length
       : 4;
 
+    const aiInsights = Array.isArray(aiData.competitor_insights) ? aiData.competitor_insights : [];
+
     const competitor_analysis = competitorData.map(comp => {
       const compRating = comp.google_rating ?? myAvgRating;
-      const ratingGap = myAvgRating - compRating; // positive = we're better
+      const ratingGap  = Math.round((myAvgRating - compRating) * 10) / 10;
 
-      // Map our top problems to competitor weakness cards.
-      // We have no competitor review text, so comp_mentions is derived from
-      // their rating: a lower-rated competitor is assumed to suffer more from
-      // the same category of problems that hurt lower-rated businesses generally.
-      const weaknesses = problems.slice(0, 3).map(prob => {
-        // Estimate competitor complaints from their rating deficit
-        // A 1-star lower rating ≈ 30% more complaints on common issues
-        const ratingDeficit = Math.max(0, myAvgRating - compRating);
-        const estimatedCompMentions = Math.round(prob.mention_count * (1 + ratingDeficit * 0.4));
-
-        const myScorePct = Math.round((1 - prob.mention_count / Math.max(reviews.length, 1)) * 100);
-
-        // Opportunity: competitor has lower rating AND we score better on this topic
-        const opportunity = ratingGap > 0.2 && myScorePct >= 60;
-
-        return {
-          problem_name:    prob.name,
-          comp_mentions:   null, // not available — reviews not in DB
-          my_score_pct:    myScorePct,
-          my_positive_pct: myScorePct,
-          opportunity,
-          estimated_comp_mentions: estimatedCompMentions,
-          no_review_data: true,
-        };
-      });
+      // Match AI insight for this competitor (fuzzy name match)
+      const insight = aiInsights.find(ci =>
+        ci.name && comp.name &&
+        ci.name.toLowerCase().includes(comp.name.toLowerCase().split(' ')[0]) ||
+        comp.name.toLowerCase().includes((ci.name || '').toLowerCase().split(' ')[0])
+      ) || null;
 
       return {
-        id:            comp.id,
-        name:          comp.name,
-        google_rating: comp.google_rating,
-        total_reviews: comp.total_reviews,
-        rating_gap:    Math.round(ratingGap * 10) / 10,
-        weaknesses,
+        id:               comp.id,
+        name:             comp.name,
+        google_rating:    comp.google_rating,
+        total_reviews:    comp.total_reviews,
+        rating_gap:       ratingGap,
+        verdict:          insight?.verdict ?? (ratingGap > 0.2 ? 'winning' : ratingGap < -0.2 ? 'losing' : 'tied'),
+        gap_summary:      insight?.gap_summary ?? null,
+        your_advantages:  Array.isArray(insight?.your_advantages)    ? insight.your_advantages    : [],
+        vulnerabilities:  Array.isArray(insight?.your_vulnerabilities) ? insight.your_vulnerabilities : [],
+        strategic_move:   insight?.strategic_move ?? null,
+        // Keep weaknesses for backward compat but empty — UI uses new fields
+        weaknesses: [],
       };
     });
 

@@ -42,12 +42,17 @@ type CompetitorWeakness = {
 }
 
 type CompetitorAnalysis = {
-  id:            string
-  name:          string
-  google_rating: number | null
-  total_reviews?: number | null
-  rating_gap?:   number
-  weaknesses:    CompetitorWeakness[]
+  id:              string
+  name:            string
+  google_rating:   number | null
+  total_reviews?:  number | null
+  rating_gap?:     number
+  verdict?:        'winning' | 'losing' | 'tied'
+  gap_summary?:    string | null
+  your_advantages?: string[]
+  vulnerabilities?: string[]
+  strategic_move?:  string | null
+  weaknesses:      CompetitorWeakness[]
 }
 
 type WeeklyBrief = {
@@ -555,7 +560,7 @@ function TrendChart({ problems, weekBuckets }: { problems: Problem[]; weekBucket
 
 // ── Section 5: Competitive Intelligence ───────────────────────────────────
 
-function CompetitorSection({ competitors, problems }: { competitors: CompetitorAnalysis[]; problems: Problem[] }) {
+function CompetitorSection({ competitors }: { competitors: CompetitorAnalysis[]; problems: Problem[] }) {
   if (!competitors || competitors.length === 0) {
     return (
       <div className="card p-8 text-center space-y-2">
@@ -566,82 +571,128 @@ function CompetitorSection({ competitors, problems }: { competitors: CompetitorA
     )
   }
 
+  const verdictConfig = {
+    winning: { label: 'You\'re Winning', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/25', dot: 'bg-emerald-400' },
+    losing:  { label: 'You\'re Behind',  color: 'text-red-400',     bg: 'bg-red-500/10 border-red-500/25',       dot: 'bg-red-400' },
+    tied:    { label: 'Neck & Neck',     color: 'text-amber-400',   bg: 'bg-amber-500/10 border-amber-500/25',   dot: 'bg-amber-400' },
+  }
+
   return (
     <div className="card p-5 space-y-5">
       <div>
         <h2 className="text-base font-bold text-gray-100">Competitive Intelligence</h2>
-        <p className="text-xs text-gray-500 mt-0.5">Where you win and where competitors struggle</p>
+        <p className="text-xs text-gray-500 mt-0.5">How you stack up against each competitor</p>
       </div>
-      <div className="space-y-6">
-        {competitors.map(comp => (
-          <div key={comp.id} className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center text-xs font-bold text-gray-300 shrink-0">
-                {comp.name[0]?.toUpperCase()}
-              </div>
-              <div>
-                <span className="text-sm font-semibold text-gray-200">{comp.name}</span>
-                {comp.google_rating != null && (
-                  <span className="ml-1.5 text-xs text-yellow-400">⭐ {comp.google_rating}</span>
-                )}
-              </div>
-            </div>
-            {comp.rating_gap != null && (
-              <p className="pl-9 text-[11px] text-gray-500">
-                Rating gap: <span className={comp.rating_gap > 0 ? 'text-emerald-400' : comp.rating_gap < 0 ? 'text-red-400' : 'text-gray-400'}>
-                  {comp.rating_gap > 0 ? '+' : ''}{comp.rating_gap} stars vs you
-                </span>
-                {comp.total_reviews != null && <> · {comp.total_reviews.toLocaleString()} reviews</>}
-              </p>
-            )}
-            <div className="pl-9 space-y-3">
-              {(comp.weaknesses ?? []).map(w => {
-                const relatedProblem = problems.find(p => p.name === w.problem_name)
-                return (
-                  <div key={w.problem_name} className="bg-[#080d1a] border border-[#1a2540] rounded-xl p-3 space-y-2">
-                    <div className="flex items-start justify-between gap-2 flex-wrap">
-                      <div>
-                        <p className="text-xs text-gray-300 font-medium">{w.problem_name}</p>
-                        {w.no_review_data ? (
-                          <p className="text-[11px] text-gray-600 mt-0.5 italic">
-                            Competitor reviews not in database — re-run Competitor Spy to fetch them
-                          </p>
-                        ) : (
-                          <p className="text-[11px] text-gray-500 mt-0.5">
-                            <span className="font-semibold text-orange-400">{w.comp_mentions}</span> complaints detected in their reviews
-                          </p>
-                        )}
-                        <p className="text-[11px] text-gray-500 mt-0.5">
-                          Your score on this topic: <span className={`font-semibold ${w.my_score_pct >= 75 ? 'text-emerald-400' : w.my_score_pct >= 50 ? 'text-amber-400' : 'text-red-400'}`}>{w.my_score_pct}%</span>
-                        </p>
-                      </div>
-                      {w.opportunity && (
-                        <span className="shrink-0 text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 whitespace-nowrap">
-                          ✓ You win here
-                        </span>
-                      )}
-                    </div>
-                    {w.opportunity && !w.no_review_data && (
-                      <p className="text-[11px] text-emerald-400/80">
-                        OPPORTUNITY: You are winning on {w.problem_name} — {w.comp_mentions} competitor complaints vs your {w.my_score_pct}% satisfaction rate
-                      </p>
-                    )}
-                    {w.opportunity && w.no_review_data && comp.rating_gap != null && comp.rating_gap > 0 && (
-                      <p className="text-[11px] text-emerald-400/80">
-                        OPPORTUNITY: You are rated {comp.rating_gap} stars higher — you likely outperform them on {w.problem_name}
-                      </p>
-                    )}
-                    {relatedProblem?.specific_action && w.opportunity && (
-                      <p className="text-[11px] text-purple-400/80">
-                        Suggested: {relatedProblem.specific_action}
-                      </p>
-                    )}
+
+      <div className="space-y-5">
+        {competitors.map(comp => {
+          const verdict = comp.verdict ?? 'tied'
+          const cfg = verdictConfig[verdict] ?? verdictConfig.tied
+          const gap = comp.rating_gap ?? 0
+
+          return (
+            <div key={comp.id} className="bg-[#080d1a] border border-[#1a2540] rounded-xl p-4 space-y-4">
+
+              {/* Header row */}
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-800 to-blue-900 flex items-center justify-center text-xs font-bold text-gray-200 shrink-0">
+                    {comp.name[0]?.toUpperCase()}
                   </div>
-                )
-              })}
+                  <div>
+                    <p className="text-sm font-semibold text-gray-100">{comp.name}</p>
+                    <p className="text-[11px] text-gray-500">
+                      {comp.google_rating != null ? `⭐ ${comp.google_rating} stars` : 'Rating unknown'}
+                      {comp.total_reviews != null && <> · {comp.total_reviews.toLocaleString()} reviews</>}
+                    </p>
+                  </div>
+                </div>
+                <span className={`shrink-0 flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full border ${cfg.bg} ${cfg.color}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                  {cfg.label}
+                </span>
+              </div>
+
+              {/* Rating comparison bar */}
+              {comp.google_rating != null && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[10px] text-gray-500">
+                    <span>Rating comparison</span>
+                    <span className={gap > 0 ? 'text-emerald-400' : gap < 0 ? 'text-red-400' : 'text-gray-400'}>
+                      {gap > 0 ? `+${gap}` : gap} stars vs them
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-gray-500 w-4">You</span>
+                    <div className="flex-1 h-2 bg-[#1e2d4a] rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-purple-500 to-blue-500"
+                        style={{ width: `${((parseFloat(String(comp.google_rating)) + gap) / 5) * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-purple-400 w-8 text-right font-medium">
+                      {((comp.google_rating ?? 0) + gap).toFixed(1)}★
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-gray-500 w-4">Them</span>
+                    <div className="flex-1 h-2 bg-[#1e2d4a] rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-gray-600 to-gray-500"
+                        style={{ width: `${((comp.google_rating ?? 0) / 5) * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-gray-400 w-8 text-right font-medium">
+                      {comp.google_rating}★
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* AI gap summary */}
+              {comp.gap_summary && (
+                <p className="text-xs text-gray-300 leading-relaxed border-l-2 border-purple-500/40 pl-3">
+                  {comp.gap_summary}
+                </p>
+              )}
+
+              {/* Advantages & Vulnerabilities */}
+              {((comp.your_advantages?.length ?? 0) > 0 || (comp.vulnerabilities?.length ?? 0) > 0) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {(comp.your_advantages?.length ?? 0) > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide">Your Advantages</p>
+                      {comp.your_advantages!.map((a, i) => (
+                        <p key={i} className="text-[11px] text-gray-400 flex items-start gap-1.5">
+                          <span className="text-emerald-500 mt-0.5 shrink-0">✓</span>{a}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  {(comp.vulnerabilities?.length ?? 0) > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-bold text-red-400 uppercase tracking-wide">Your Vulnerabilities</p>
+                      {comp.vulnerabilities!.map((v, i) => (
+                        <p key={i} className="text-[11px] text-gray-400 flex items-start gap-1.5">
+                          <span className="text-red-500 mt-0.5 shrink-0">⚠</span>{v}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Strategic move */}
+              {comp.strategic_move && (
+                <div className="bg-purple-500/8 border border-purple-500/20 rounded-lg px-3 py-2.5">
+                  <p className="text-[10px] font-bold text-purple-400 uppercase tracking-wide mb-1">Strategic Move</p>
+                  <p className="text-xs text-gray-300">{comp.strategic_move}</p>
+                </div>
+              )}
+
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
