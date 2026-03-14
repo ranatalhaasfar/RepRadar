@@ -183,12 +183,9 @@ export default async function handler(req, res) {
             ? `,\n  "competitor_insights": [\n` +
               `    {\n` +
               `      "name": "Exact competitor name from the list above",\n` +
-              `      "rating": 4.4,\n` +
-              `      "verdict": "one of: winning, losing, tied",\n` +
-              `      "gap_summary": "1 sentence: are you ahead or behind and by how much — use specific numbers",\n` +
-              `      "your_advantages": ["specific thing you do better based on YOUR reviews", "another advantage"],\n` +
-              `      "your_vulnerabilities": ["specific area where YOUR reviews show weakness that they could exploit"],\n` +
-              `      "strategic_move": "One concrete action to take to win customers away from this specific competitor"\n` +
+              `      "weaknesses": ["specific complaint customers leave in their reviews e.g. Slow service", "Cold food"],\n` +
+              `      "they_do_better": ["specific factual advantage they have e.g. 3x more reviews", "Higher rating by 0.3 stars"],\n` +
+              `      "opportunities": ["specific action to exploit their weakness e.g. Promote faster service in ads", "Target their unhappy customers with a discount offer"]\n` +
               `    }\n` +
               `  ]\n` +
               `}`
@@ -203,9 +200,9 @@ export default async function handler(req, res) {
           `- weekly_narrative: write like a consultant — frank, specific, actionable\n` +
           (hasCompetitors
             ? `- competitor_insights: one entry per competitor listed above\n` +
-              `- verdict: "winning" if your rating is higher, "losing" if theirs is higher, "tied" if within 0.2\n` +
-              `- your_advantages/vulnerabilities: based on YOUR actual review themes, not generic\n` +
-              `- strategic_move: specific, actionable, tailored to this business type and competitor\n`
+              `- weaknesses: 2-4 actual complaints their customers leave (infer from their lower rating and the business type)\n` +
+              `- they_do_better: 2-3 factual advantages they have — use real numbers from the data (review count, rating difference)\n` +
+              `- opportunities: 2-3 specific, actionable moves this business can make to exploit the competitor's weaknesses\n`
             : '') +
           `\nReviews:\n${sample}`,
       }],
@@ -338,18 +335,14 @@ export default async function handler(req, res) {
       ) || null;
 
       return {
-        id:               comp.id,
-        name:             comp.name,
-        google_rating:    comp.google_rating,
-        total_reviews:    comp.total_reviews,
-        rating_gap:       ratingGap,
-        verdict:          insight?.verdict ?? (ratingGap > 0.2 ? 'winning' : ratingGap < -0.2 ? 'losing' : 'tied'),
-        gap_summary:      insight?.gap_summary ?? null,
-        your_advantages:  Array.isArray(insight?.your_advantages)    ? insight.your_advantages    : [],
-        vulnerabilities:  Array.isArray(insight?.your_vulnerabilities) ? insight.your_vulnerabilities : [],
-        strategic_move:   insight?.strategic_move ?? null,
-        // Keep weaknesses for backward compat but empty — UI uses new fields
-        weaknesses: [],
+        id:            comp.id,
+        name:          comp.name,
+        google_rating: comp.google_rating,
+        total_reviews: comp.total_reviews,
+        rating_gap:    ratingGap,
+        weaknesses:    Array.isArray(insight?.weaknesses)     ? insight.weaknesses     : [],
+        they_do_better: Array.isArray(insight?.they_do_better) ? insight.they_do_better : [],
+        opportunities:  Array.isArray(insight?.opportunities)  ? insight.opportunities  : [],
       };
     });
 

@@ -31,28 +31,15 @@ type Problem = {
   specific_action:      string
 }
 
-type CompetitorWeakness = {
-  problem_name:             string
-  comp_mentions:            number | null
-  my_score_pct:             number
-  my_positive_pct:          number
-  opportunity:              boolean
-  no_review_data?:          boolean
-  estimated_comp_mentions?: number
-}
-
 type CompetitorAnalysis = {
   id:              string
   name:            string
   google_rating:   number | null
   total_reviews?:  number | null
   rating_gap?:     number
-  verdict?:        'winning' | 'losing' | 'tied'
-  gap_summary?:    string | null
-  your_advantages?: string[]
-  vulnerabilities?: string[]
-  strategic_move?:  string | null
-  weaknesses:      CompetitorWeakness[]
+  weaknesses:      string[]
+  they_do_better:  string[]
+  opportunities:   string[]
 }
 
 type WeeklyBrief = {
@@ -571,124 +558,94 @@ function CompetitorSection({ competitors }: { competitors: CompetitorAnalysis[];
     )
   }
 
-  const verdictConfig = {
-    winning: { label: 'You\'re Winning', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/25', dot: 'bg-emerald-400' },
-    losing:  { label: 'You\'re Behind',  color: 'text-red-400',     bg: 'bg-red-500/10 border-red-500/25',       dot: 'bg-red-400' },
-    tied:    { label: 'Neck & Neck',     color: 'text-amber-400',   bg: 'bg-amber-500/10 border-amber-500/25',   dot: 'bg-amber-400' },
-  }
+  const columns = [
+    {
+      key:       'weaknesses'    as const,
+      icon:      '🔴',
+      label:     'Their Complaints',
+      textColor: 'text-red-400',
+      dotColor:  'text-red-500',
+      emptyMsg:  'No complaints detected',
+    },
+    {
+      key:       'they_do_better' as const,
+      icon:      '🟡',
+      label:     'They Beat Us',
+      textColor: 'text-amber-400',
+      dotColor:  'text-amber-500',
+      emptyMsg:  'No clear advantages',
+    },
+    {
+      key:       'opportunities'  as const,
+      icon:      '🟢',
+      label:     'Our Opportunity',
+      textColor: 'text-emerald-400',
+      dotColor:  'text-emerald-500',
+      emptyMsg:  'Generating opportunities…',
+    },
+  ]
 
   return (
     <div className="card p-5 space-y-5">
       <div>
         <h2 className="text-base font-bold text-gray-100">Competitive Intelligence</h2>
-        <p className="text-xs text-gray-500 mt-0.5">How you stack up against each competitor</p>
+        <p className="text-xs text-gray-500 mt-0.5">Their weaknesses, their edges, your moves</p>
       </div>
 
-      <div className="space-y-5">
+      <div className="space-y-4">
         {competitors.map(comp => {
-          const verdict = comp.verdict ?? 'tied'
-          const cfg = verdictConfig[verdict] ?? verdictConfig.tied
           const gap = comp.rating_gap ?? 0
-
           return (
-            <div key={comp.id} className="bg-[#080d1a] border border-[#1a2540] rounded-xl p-4 space-y-4">
+            <div key={comp.id} className="bg-[#080d1a] border border-[#1a2540] rounded-xl overflow-hidden">
 
-              {/* Header row */}
-              <div className="flex items-start justify-between gap-3 flex-wrap">
+              {/* Competitor header */}
+              <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[#1a2540]">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-800 to-blue-900 flex items-center justify-center text-xs font-bold text-gray-200 shrink-0">
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-800 to-blue-900 flex items-center justify-center text-xs font-bold text-gray-200 shrink-0">
                     {comp.name[0]?.toUpperCase()}
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-100">{comp.name}</p>
-                    <p className="text-[11px] text-gray-500">
-                      {comp.google_rating != null ? `⭐ ${comp.google_rating} stars` : 'Rating unknown'}
-                      {comp.total_reviews != null && <> · {comp.total_reviews.toLocaleString()} reviews</>}
-                    </p>
-                  </div>
+                  <span className="text-sm font-semibold text-gray-100">{comp.name}</span>
                 </div>
-                <span className={`shrink-0 flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full border ${cfg.bg} ${cfg.color}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-                  {cfg.label}
-                </span>
+                <div className="flex items-center gap-3 text-[11px] text-gray-400 flex-wrap justify-end">
+                  {comp.google_rating != null && (
+                    <span className="text-yellow-400 font-medium">⭐ {comp.google_rating}</span>
+                  )}
+                  {comp.total_reviews != null && (
+                    <span>{comp.total_reviews.toLocaleString()} reviews</span>
+                  )}
+                  {comp.google_rating != null && (
+                    <span className={`font-semibold ${gap > 0 ? 'text-emerald-400' : gap < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                      {gap > 0 ? `+${gap}` : gap} vs you
+                    </span>
+                  )}
+                </div>
               </div>
 
-              {/* Rating comparison bar */}
-              {comp.google_rating != null && (
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-[10px] text-gray-500">
-                    <span>Rating comparison</span>
-                    <span className={gap > 0 ? 'text-emerald-400' : gap < 0 ? 'text-red-400' : 'text-gray-400'}>
-                      {gap > 0 ? `+${gap}` : gap} stars vs them
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-gray-500 w-4">You</span>
-                    <div className="flex-1 h-2 bg-[#1e2d4a] rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-purple-500 to-blue-500"
-                        style={{ width: `${((parseFloat(String(comp.google_rating)) + gap) / 5) * 100}%` }}
-                      />
+              {/* 3-column grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-[#1a2540]">
+                {columns.map(col => {
+                  const items: string[] = Array.isArray(comp[col.key]) ? comp[col.key] as string[] : []
+                  return (
+                    <div key={col.key} className="p-3 space-y-2">
+                      <p className={`text-[11px] font-bold uppercase tracking-wide ${col.textColor}`}>
+                        {col.icon} {col.label}
+                      </p>
+                      {items.length === 0 ? (
+                        <p className="text-[11px] text-gray-600 italic">{col.emptyMsg}</p>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {items.map((item, i) => (
+                            <li key={i} className="flex items-start gap-1.5 text-[11px] text-gray-300">
+                              <span className={`${col.dotColor} shrink-0 mt-0.5`}>•</span>
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
-                    <span className="text-[10px] text-purple-400 w-8 text-right font-medium">
-                      {((comp.google_rating ?? 0) + gap).toFixed(1)}★
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-gray-500 w-4">Them</span>
-                    <div className="flex-1 h-2 bg-[#1e2d4a] rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-gray-600 to-gray-500"
-                        style={{ width: `${((comp.google_rating ?? 0) / 5) * 100}%` }}
-                      />
-                    </div>
-                    <span className="text-[10px] text-gray-400 w-8 text-right font-medium">
-                      {comp.google_rating}★
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* AI gap summary */}
-              {comp.gap_summary && (
-                <p className="text-xs text-gray-300 leading-relaxed border-l-2 border-purple-500/40 pl-3">
-                  {comp.gap_summary}
-                </p>
-              )}
-
-              {/* Advantages & Vulnerabilities */}
-              {((comp.your_advantages?.length ?? 0) > 0 || (comp.vulnerabilities?.length ?? 0) > 0) && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {(comp.your_advantages?.length ?? 0) > 0 && (
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide">Your Advantages</p>
-                      {comp.your_advantages!.map((a, i) => (
-                        <p key={i} className="text-[11px] text-gray-400 flex items-start gap-1.5">
-                          <span className="text-emerald-500 mt-0.5 shrink-0">✓</span>{a}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                  {(comp.vulnerabilities?.length ?? 0) > 0 && (
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-bold text-red-400 uppercase tracking-wide">Your Vulnerabilities</p>
-                      {comp.vulnerabilities!.map((v, i) => (
-                        <p key={i} className="text-[11px] text-gray-400 flex items-start gap-1.5">
-                          <span className="text-red-500 mt-0.5 shrink-0">⚠</span>{v}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Strategic move */}
-              {comp.strategic_move && (
-                <div className="bg-purple-500/8 border border-purple-500/20 rounded-lg px-3 py-2.5">
-                  <p className="text-[10px] font-bold text-purple-400 uppercase tracking-wide mb-1">Strategic Move</p>
-                  <p className="text-xs text-gray-300">{comp.strategic_move}</p>
-                </div>
-              )}
+                  )
+                })}
+              </div>
 
             </div>
           )
