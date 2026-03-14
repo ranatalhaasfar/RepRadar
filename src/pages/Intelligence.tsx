@@ -345,7 +345,7 @@ function TrendChart({ problems, weekBuckets }: { problems: Problem[]; weekBucket
               fill="transparent"
               className="cursor-crosshair"
               onMouseEnter={(e) => {
-                const rect = (e.target as SVGRectElement).closest('svg')!.getBoundingClientRect()
+                ;(e.target as SVGRectElement).closest('svg')!.getBoundingClientRect()
                 setTooltip({
                   x: xScale(i),
                   y: Math.min(...top3.map(p => yScale(p.weekly_volume[i] ?? 0))),
