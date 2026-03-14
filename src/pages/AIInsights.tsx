@@ -112,43 +112,15 @@ export default function AIInsights() {
     if (!user || !activeBusiness) return
     const bizId = activeBusiness.id
     setError('')
-
-    // ── Debug: dump raw localStorage state ──
     const localKey = `repradar_insights_${bizId}`
-    const rawCached = localStorage.getItem(localKey)
-    console.log('=== AI INSIGHTS LOAD ===')
-    console.log('Business ID:', bizId)
-    console.log('localStorage key:', localKey)
-    console.log('localStorage raw value:', rawCached ? `${rawCached.slice(0, 120)}…` : 'null (nothing saved)')
-    console.log('Zustand insights count:', Array.isArray(insights) ? insights.length : '(non-array)', '| insightsBusinessId:', insightsBusinessId)
 
-    // ─── Layer 1: Zustand store (in-memory, survives tab switches but not refreshes) ───
+    // ─── Layer 1: Zustand (in-memory, fastest) ───
     if (insightsBusinessId === bizId && Array.isArray(insights) && insights.length > 0) {
-      console.log('[AIInsights] ✅ Layer 1 hit — Zustand store')
       setCacheSource('zustand')
       return
     }
 
-    // ─── Layer 2: localStorage (survives browser refresh) ───
-    // Direct parse — bypass lcLoad wrapper to rule out any helper bug
-    if (rawCached) {
-      try {
-        const parsed = JSON.parse(rawCached) as { data: Insight[]; savedAt: number }
-        if (Array.isArray(parsed?.data) && parsed.data.length > 0) {
-          console.log('[AIInsights] ✅ Layer 2 hit — localStorage', parsed.data.length, 'insights, saved at', new Date(parsed.savedAt).toLocaleTimeString())
-          setInsights(parsed.data, bizId)
-          setCacheSource('localStorage')
-          return
-        } else {
-          console.log('[AIInsights] ⚠ localStorage key exists but data is empty/malformed — clearing:', parsed)
-          localStorage.removeItem(localKey)
-        }
-      } catch (e) {
-        console.log('[AIInsights] ⚠ localStorage parse error:', e)
-      }
-    }
-
-    // ─── Layer 3: Supabase (permanent DB storage) ───
+    // ─── Layer 2: Supabase (source of truth — cross-device) ───
     setLoading(true)
     try {
       const { data: cached, error: cacheErr } = await supabase
@@ -162,7 +134,6 @@ export default function AIInsights() {
       }
 
       if (cached && cached.length > 0) {
-        console.log('[AIInsights] ✅ Layer 3 hit — Supabase')
         const loaded: Insight[] = cached.map((row, i) => ({
           id:             i,
           icon:           row.icon ?? '💡',
@@ -172,20 +143,35 @@ export default function AIInsights() {
           recommendation: row.recommendation,
           impact:         row.impact as Impact,
         }))
-        // Save to Layer 1 (Zustand) and Layer 2 (localStorage)
         setInsights(loaded, bizId)
-        localStorage.setItem(`repradar_insights_${bizId}`, JSON.stringify({ data: loaded, savedAt: Date.now() }))
-        console.log('[AIInsights] ✅ Layer 3 hit — Supabase, saved to localStorage')
+        // Back-fill localStorage for offline/instant access
+        localStorage.setItem(localKey, JSON.stringify({ data: loaded, savedAt: Date.now() }))
         setCacheSource('supabase')
-      } else {
-        // ─── All 3 layers empty ───
-        const { count } = await supabase
-          .from('reviews')
-          .select('id', { count: 'exact', head: true })
-          .eq('business_id', bizId)
-        setNoReviews((count ?? 0) === 0)
-        setCacheSource(null)
+        return
       }
+
+      // ─── Layer 3: localStorage fallback (if Supabase is empty, e.g. row was deleted) ───
+      const rawCached = localStorage.getItem(localKey)
+      if (rawCached) {
+        try {
+          const parsed = JSON.parse(rawCached) as { data: Insight[]; savedAt: number }
+          if (Array.isArray(parsed?.data) && parsed.data.length > 0) {
+            setInsights(parsed.data, bizId)
+            setCacheSource('localStorage')
+            return
+          }
+        } catch {
+          localStorage.removeItem(localKey)
+        }
+      }
+
+      // ─── All layers empty — show empty state ───
+      const { count } = await supabase
+        .from('reviews')
+        .select('id', { count: 'exact', head: true })
+        .eq('business_id', bizId)
+      setNoReviews((count ?? 0) === 0)
+      setCacheSource(null)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load insights')
     } finally {
@@ -210,18 +196,22 @@ export default function AIInsights() {
       const texts = (revData ?? []).map(r => r.review_text)
       if (texts.length === 0) {
         setNoReviews(true)
-        // Clear all 3 layers
         clearInsights()
         localStorage.removeItem(`repradar_insights_${bizId}`)
         await supabase.from('insights').delete().eq('business_id', bizId)
         return
       }
 
-      console.log('[AIInsights] 🌐 Refresh — calling Anthropic API')
+      // Clear all layers before regenerating so fresh result is the new source of truth
+      clearInsights()
+      localStorage.removeItem(`repradar_insights_${bizId}`)
+      await supabase.from('insights').delete().eq('business_id', bizId)
+
       const res = await fetch('/api/generate-insights', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
+          business_id:  bizId,
           businessName: activeBusiness.name,
           businessType: activeBusiness.type,
           reviews: texts,
@@ -232,35 +222,12 @@ export default function AIInsights() {
         throw new Error(errData.error ?? 'Failed to generate insights')
       }
       const data = await res.json()
+      // API now saves to Supabase itself — just update local layers
       const rawInsights: Omit<Insight, 'id'>[] = data.insights ?? []
       const fresh = rawInsights.map((ins, i) => ({ ...ins, id: i }))
 
-      // Save to Layer 3: Supabase
-      await supabase.from('insights').delete().eq('business_id', bizId)
-      const now = new Date().toISOString()
-      const rows = rawInsights.map(ins => ({
-        business_id: bizId, user_id: user.id,
-        icon: ins.icon, category: ins.category, title: ins.title,
-        description: ins.description, recommendation: ins.recommendation,
-        impact: ins.impact, created_at: now,
-      }))
-      if (rows.length > 0) {
-        const { error: insertErr } = await supabase.from('insights').insert(rows)
-        if (insertErr) console.error('[AIInsights] ❌ Supabase insert error:', insertErr.message)
-        else console.log('[AIInsights] ✅ Layer 3 saved — Supabase')
-      }
-
-      // Save to Layer 2: localStorage — direct write AND via helper
-      const lsKey = `repradar_insights_${bizId}`
-      const lsValue = JSON.stringify({ data: fresh, savedAt: Date.now() })
-      localStorage.setItem(lsKey, lsValue)
-      console.log('[AIInsights] ✅ Layer 2 saved — localStorage key:', lsKey, '| insights count:', fresh.length)
-      console.log('[AIInsights] 📦 Verify — reading back:', localStorage.getItem(lsKey) ? 'KEY EXISTS ✅' : 'KEY MISSING ❌')
-
-      // Save to Layer 1: Zustand
+      localStorage.setItem(`repradar_insights_${bizId}`, JSON.stringify({ data: fresh, savedAt: Date.now() }))
       setInsights(fresh, bizId)
-      console.log('[AIInsights] ✅ Layer 1 saved — Zustand')
-
       setNoReviews(false)
       setCacheSource('api')
     } catch (e: unknown) {

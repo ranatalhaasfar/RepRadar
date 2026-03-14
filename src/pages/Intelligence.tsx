@@ -1144,32 +1144,55 @@ export default function Intelligence() {
     setError('')
   }, [businessId])
 
-  // Load from localStorage cache when business changes (never auto-call API)
+  // Load report on business change: localStorage → Supabase (never auto-call API)
   useEffect(() => {
     if (!businessId) return
+    let cancelled = false
     const cacheKey = `repradar_intelligence_${businessId}`
+
+    // ── Layer 1: localStorage (instant) ──
     try {
       const raw = localStorage.getItem(cacheKey)
-      if (!raw) return
-      const parsed = JSON.parse(raw) as { businessId: string; data: Record<string, unknown>; savedAt: string }
-      // Strict business ID check
-      if (parsed.businessId !== businessId) {
+      if (raw) {
+        const parsed = JSON.parse(raw) as { businessId: string; data: Record<string, unknown>; savedAt: string }
+        if (parsed.businessId === businessId) {
+          const sevenDays = 7 * 24 * 60 * 60 * 1000
+          if (Date.now() - new Date(parsed.savedAt).getTime() <= sevenDays) {
+            const normalized = normalizeReport(parsed.data)
+            if (!normalized.business_id || normalized.business_id === businessId) {
+              if (!cancelled) { setReport(normalized); setReportBizId(businessId) }
+              return // localStorage hit — skip Supabase fetch
+            }
+          }
+        }
         localStorage.removeItem(cacheKey)
-        return
       }
-      const sevenDays = 7 * 24 * 60 * 60 * 1000
-      if (Date.now() - new Date(parsed.savedAt).getTime() > sevenDays) {
-        localStorage.removeItem(cacheKey)
-        return
-      }
-      const normalized = normalizeReport(parsed.data)
-      // Final guard: report must be for this business
-      if (normalized.business_id && normalized.business_id !== businessId) return
-      setReport(normalized)
-      setReportBizId(businessId)
     } catch {
       localStorage.removeItem(cacheKey)
     }
+
+    // ── Layer 2: Supabase (cross-device persistent) ──
+    supabase
+      .from('intelligence_reports')
+      .select('*')
+      .eq('business_id', businessId)
+      .order('generated_at', { ascending: false })
+      .limit(1)
+      .single()
+      .then(({ data: row }) => {
+        if (cancelled || !row) return
+        const normalized = normalizeReport(row as Record<string, unknown>)
+        setReport(normalized)
+        setReportBizId(businessId)
+        // Back-fill localStorage so next visit is instant
+        localStorage.setItem(cacheKey, JSON.stringify({
+          businessId,
+          data: row,
+          savedAt: new Date().toISOString(),
+        }))
+      })
+
+    return () => { cancelled = true }
   }, [businessId])
 
   const generateReport = async () => {
@@ -1178,6 +1201,11 @@ export default function Intelligence() {
     setGenerating(true)
     setError('')
     try {
+      // Clear all cache layers so the fresh result becomes the new source of truth
+      const cacheKey = `repradar_intelligence_${currentBizId}`
+      localStorage.removeItem(cacheKey)
+      await supabase.from('intelligence_reports').delete().eq('business_id', currentBizId)
+
       const res = await fetch('/api/generate-intelligence', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1204,8 +1232,7 @@ export default function Intelligence() {
       const normalized = normalizeReport({ ...raw, business_id: currentBizId })
       setReport(normalized)
       setReportBizId(currentBizId)
-      // Save to per-business localStorage cache
-      const cacheKey = `repradar_intelligence_${currentBizId}`
+      // Back-fill localStorage for instant load next visit
       localStorage.setItem(cacheKey, JSON.stringify({
         businessId: currentBizId,
         data: { ...raw, business_id: currentBizId },

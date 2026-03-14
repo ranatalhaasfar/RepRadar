@@ -56,6 +56,29 @@ export default async function handler(req, res) {
     });
 
     const data = extractJSONObject(response.content[0].type === 'text' ? response.content[0].text : '')
+
+    // Persist to Supabase so data survives browser clears and other devices
+    if (business_id && Array.isArray(data.insights) && data.insights.length > 0) {
+      const supabase = getSupabase();
+      if (supabase) {
+        try {
+          await supabase.from('insights').delete().eq('business_id', business_id);
+          const now = new Date().toISOString();
+          const rows = data.insights.map(ins => ({
+            business_id,
+            icon: ins.icon, category: ins.category, title: ins.title,
+            description: ins.description, recommendation: ins.recommendation,
+            impact: ins.impact, created_at: now,
+          }));
+          const { error: insertErr } = await supabase.from('insights').insert(rows);
+          if (insertErr) console.error('[generate-insights] DB insert error:', insertErr.message);
+          else console.log('[generate-insights] saved', rows.length, 'insights to Supabase');
+        } catch (e) {
+          console.error('[generate-insights] DB save failed:', e.message);
+        }
+      }
+    }
+
     res.json(data);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
