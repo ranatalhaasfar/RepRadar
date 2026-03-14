@@ -193,13 +193,27 @@ function SeverityBadge({ severity }: { severity: string }) {
 
 // ── Section 1: Crisis / Health Alert Banner ────────────────────────────────
 
-function CrisisAlertBanner({ report }: { report: IntelReport }) {
-  const { crisis_status, problems, generated_at } = report
-  const criticalCount = (problems ?? []).filter(p => p.severity === 'critical').length
-  const seriousCount  = (problems ?? []).filter(p => p.severity === 'serious').length
-  const warningCount  = criticalCount + seriousCount
+function getHealthStatus(problems: Problem[]) {
+  const list = Array.isArray(problems) ? problems : []
+  const criticalCount = list.filter(p =>
+    p.severity === 'critical' || p.mention_count >= 10
+  ).length
+  const seriousCount = list.filter(p => p.severity === 'serious').length
 
-  if (crisis_status === 'crisis') {
+  if (criticalCount >= 2) {
+    return { level: 'crisis', criticalCount, warningCount: criticalCount + seriousCount }
+  }
+  if (criticalCount === 1 || seriousCount >= 1 || list.length >= 2) {
+    return { level: 'warning', criticalCount, warningCount: criticalCount + seriousCount }
+  }
+  return { level: 'healthy', criticalCount, warningCount: 0 }
+}
+
+function CrisisAlertBanner({ report }: { report: IntelReport }) {
+  const { problems, generated_at } = report
+  const { level, criticalCount, warningCount } = getHealthStatus(problems)
+
+  if (level === 'crisis') {
     return (
       <div className="relative overflow-hidden rounded-2xl border border-red-500/40 bg-gradient-to-r from-red-900/25 to-[#0a1020] p-5 flex items-center justify-between gap-4">
         <div className="absolute inset-0 bg-gradient-to-r from-red-500/5 to-transparent pointer-events-none" />
@@ -222,7 +236,7 @@ function CrisisAlertBanner({ report }: { report: IntelReport }) {
     )
   }
 
-  if (crisis_status === 'warning') {
+  if (level === 'warning') {
     return (
       <div className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-900/15 to-[#0a1020] p-5 flex items-center justify-between gap-4">
         <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 to-transparent pointer-events-none" />

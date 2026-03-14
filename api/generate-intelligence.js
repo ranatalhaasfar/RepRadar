@@ -362,7 +362,13 @@ export default async function handler(req, res) {
     }))
 
     const totalDeduction = deductions.reduce((sum, d) => sum + d.points, 0)
-    const healthScore = Math.max(20, Math.min(100, sentimentScore + totalDeduction))
+    let healthScore = Math.max(20, Math.min(100, sentimentScore + totalDeduction))
+
+    // Cap score when critical problems exist — a business with 10+ mention
+    // complaints cannot truthfully score above 70 regardless of sentiment mix
+    const criticalByMentions = problems.filter(p => p.mention_count >= 10).length
+    if (criticalByMentions >= 2) healthScore = Math.min(healthScore, 55)
+    else if (criticalByMentions >= 1) healthScore = Math.min(healthScore, 70)
 
     const potentialScore = Math.min(100, healthScore + 50)
 
