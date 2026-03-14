@@ -37,7 +37,26 @@ export default async function handler(req, res) {
       const sevenDays = 7 * 24 * 60 * 60 * 1000;
       if (age < sevenDays) {
         console.log('[/api/generate-intelligence] cache hit for', business_id);
-        return res.json({ ...cached, cached: true });
+        // Normalize cached row — DB only stores a subset of fields; fill in safe defaults
+        // for anything missing so the frontend never gets undefined arrays.
+        const normalized = {
+          ...cached,
+          problems:            Array.isArray(cached.problems)            ? cached.problems            : [],
+          competitor_analysis: Array.isArray(cached.competitor_analysis) ? cached.competitor_analysis : [],
+          week_buckets:        Array.isArray(cached.week_buckets)        ? cached.week_buckets        : [],
+          total_reviews:       cached.total_reviews  ?? 0,
+          potential_score:     cached.potential_score ?? cached.health_score ?? 0,
+          health_score:        cached.health_score    ?? 0,
+          weekly_brief: cached.weekly_brief ? {
+            ...cached.weekly_brief,
+            action_items: Array.isArray(cached.weekly_brief.action_items) ? cached.weekly_brief.action_items : [],
+          } : {
+            week_label: '', weekly_stats: { this_week_count: 0, last_week_count: 0, this_week_rating: null, last_week_rating: null },
+            narrative: '', top_priority: '', biggest_win: '', action_items: [],
+          },
+          cached: true,
+        };
+        return res.json(normalized);
       }
     }
   }
@@ -270,7 +289,10 @@ export default async function handler(req, res) {
       competitor_analysis:  report.competitor_analysis,
       weekly_brief:         report.weekly_brief,
       health_score:         report.health_score,
-    });
+      potential_score:      report.potential_score,
+      total_reviews:        report.total_reviews,
+      week_buckets:         report.week_buckets,
+    }).select();
 
     return res.json(report);
   } catch (error) {
