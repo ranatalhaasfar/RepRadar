@@ -138,19 +138,10 @@ export default async function handler(req, res) {
     const safeName = sanitizeText(business_name);
     const safeType = sanitizeText(business_type);
 
-    // Build competitor context block for the prompt
-    const hasCompetitors = competitorData.length > 0;
-    const competitorBlock = hasCompetitors
-      ? '\n\nCOMPETITOR LANDSCAPE:\n' +
-        competitorData.map(c =>
-          `- ${c.name}: ${c.google_rating != null ? c.google_rating + ' stars' : 'rating unknown'}` +
-          `${c.total_reviews != null ? ', ' + c.total_reviews + ' reviews' : ''}`
-        ).join('\n')
-      : '';
-
     const myAvgRatingStr = reviews.length > 0
       ? (reviews.reduce((s, r) => s + (r.rating ?? 4), 0) / reviews.length).toFixed(1)
       : null;
+
 
     const response = await getClient().messages.create({
       model: 'claude-sonnet-4-6',
@@ -160,8 +151,7 @@ export default async function handler(req, res) {
         role: 'user',
         content:
           `Analyze these customer reviews for "${safeName}" (${safeType}) for the week of ${weekStr}.\n` +
-          `This business has an average rating of ${myAvgRatingStr ?? 'unknown'} stars.` +
-          competitorBlock + '\n\n' +
+          `This business has an average rating of ${myAvgRatingStr ?? 'unknown'} stars.\n\n` +
           `Each review line is formatted as: [date|rating|sentiment] text\n\n` +
           `Return a JSON object with EXACTLY this shape:\n` +
           `{\n` +
@@ -178,18 +168,8 @@ export default async function handler(req, res) {
           `  "weekly_narrative": "A full paragraph written like a business consultant delivering a frank assessment of what the reviews reveal this week. Include specific patterns, risks, and opportunities.",\n` +
           `  "top_priority": "Single most important action this week — be specific",\n` +
           `  "biggest_win": "One positive highlight from this week's reviews",\n` +
-          `  "action_items": ["specific action 1", "specific action 2", "specific action 3"]` +
-          (hasCompetitors
-            ? `,\n  "competitor_insights": [\n` +
-              `    {\n` +
-              `      "name": "Exact competitor name from the list above",\n` +
-              `      "weaknesses": ["specific complaint customers leave in their reviews e.g. Slow service", "Cold food"],\n` +
-              `      "they_do_better": ["specific factual advantage they have e.g. 3x more reviews", "Higher rating by 0.3 stars"],\n` +
-              `      "opportunities": ["specific action to exploit their weakness e.g. Promote faster service in ads", "Target their unhappy customers with a discount offer"]\n` +
-              `    }\n` +
-              `  ]\n` +
-              `}`
-            : '\n}') + '\n\n' +
+          `  "action_items": ["specific action 1", "specific action 2", "specific action 3"]\n` +
+          `}\n\n` +
           `Rules:\n` +
           `- Identify 3-6 specific problems customers complain about in negative reviews\n` +
           `- keywords: 4-10 lowercase words/phrases customers use to describe this problem\n` +
@@ -198,12 +178,6 @@ export default async function handler(req, res) {
           `- trend_pct: estimated percentage change (0-50)\n` +
           `- specific_action: must be tailored to this business type and problem, not generic\n` +
           `- weekly_narrative: write like a consultant — frank, specific, actionable\n` +
-          (hasCompetitors
-            ? `- competitor_insights: one entry per competitor listed above\n` +
-              `- weaknesses: 2-4 actual complaints their customers leave (infer from their lower rating and the business type)\n` +
-              `- they_do_better: 2-3 factual advantages they have — use real numbers from the data (review count, rating difference)\n` +
-              `- opportunities: 2-3 specific, actionable moves this business can make to exploit the competitor's weaknesses\n`
-            : '') +
           `\nReviews:\n${sample}`,
       }],
     });
@@ -316,33 +290,84 @@ export default async function handler(req, res) {
       .sort((a, b) => new Date(a.reviewed_at).getTime() - new Date(b.reviewed_at).getTime())
     const oldest_unanswered = oldestNegative.length > 0 ? oldestNegative[0].reviewed_at : null
 
-    // ── Competitor analysis — merge AI insights with metadata ─────────────
+    // ── Competitor analysis — fully data-driven, no AI guessing ──────────
+    // Competitor reviews are not stored in the DB (fetched by CompetitorSpy
+    // in-memory only), so all bullets are computed from hard facts:
+    // ratings, review counts, and our own problem data.
     const myAvgRating = reviews.length > 0
       ? reviews.reduce((s, r) => s + (r.rating ?? 4), 0) / reviews.length
       : 4;
-
-    const aiInsights = Array.isArray(aiData.competitor_insights) ? aiData.competitor_insights : [];
+    const myReviewCount = reviews.length;
 
     const competitor_analysis = competitorData.map(comp => {
-      const compRating = comp.google_rating ?? myAvgRating;
-      const ratingGap  = Math.round((myAvgRating - compRating) * 10) / 10;
+      const compRating     = comp.google_rating ?? null;
+      const compCount      = comp.total_reviews ?? null;
+      const ratingGap      = compRating != null ? Math.round((myAvgRating - compRating) * 10) / 10 : null;
 
-      // Match AI insight for this competitor (fuzzy name match)
-      const insight = aiInsights.find(ci =>
-        ci.name && comp.name &&
-        ci.name.toLowerCase().includes(comp.name.toLowerCase().split(' ')[0]) ||
-        comp.name.toLowerCase().includes((ci.name || '').toLowerCase().split(' ')[0])
-      ) || null;
+      // ── They Beat Us: only real, numbered facts ──
+      const they_do_better = [];
+      if (compCount != null && myReviewCount > 0 && compCount > myReviewCount) {
+        const ratio = (compCount / myReviewCount).toFixed(1);
+        they_do_better.push(
+          `${compCount.toLocaleString()} reviews vs your ${myReviewCount.toLocaleString()} — ${ratio}x more social proof`
+        );
+      }
+      if (ratingGap != null && ratingGap < 0) {
+        // They have higher rating
+        they_do_better.push(
+          `Higher rating by ${Math.abs(ratingGap).toFixed(1)} stars (${compRating} vs your ${myAvgRating.toFixed(1)})`
+        );
+      }
+      if (they_do_better.length === 0 && compCount != null && compCount > myReviewCount) {
+        they_do_better.push(`${compCount.toLocaleString()} total reviews — stronger review volume`);
+      }
+
+      // ── Their Complaints: use our own top problems as proxy ──
+      // We don't have their review text, so we surface our shared problems
+      // (issues common to this business type) with actual mention counts.
+      // Only include problems with 3+ mentions (significant threshold).
+      const no_reviews = true; // competitor review text not in DB
+      const weaknesses = problems
+        .filter(p => p.mention_count >= 3)
+        .slice(0, 4)
+        .map(p => `"${p.name}" — mentioned in ${p.mention_count} of your reviews (likely affects competitors too)`);
+
+      // ── Our Opportunity: only include if we actually have the advantage ──
+      const opportunities = [];
+      if (ratingGap != null && ratingGap > 0) {
+        opportunities.push(
+          `You rate ${ratingGap.toFixed(1)} stars higher (${myAvgRating.toFixed(1)} vs ${compRating}) — mention this in your marketing`
+        );
+      }
+      if (compCount != null && myReviewCount > compCount) {
+        opportunities.push(
+          `You have ${myReviewCount.toLocaleString()} reviews vs their ${compCount.toLocaleString()} — you have stronger social proof`
+        );
+      }
+      // Top worsening problem = opportunity to differentiate if we fix it first
+      const worseningProblem = problems.find(p => p.trend === 'worsening' && p.mention_count >= 3);
+      if (worseningProblem) {
+        opportunities.push(
+          `Fix "${worseningProblem.name}" before competitors do — ${worseningProblem.mention_count} mentions and worsening`
+        );
+      }
+      // If they have more reviews, prompt for a review campaign
+      if (compCount != null && compCount > myReviewCount * 2) {
+        opportunities.push(
+          `Launch a review request campaign — close the ${Math.round(compCount / Math.max(myReviewCount, 1))}x review gap`
+        );
+      }
 
       return {
         id:            comp.id,
         name:          comp.name,
         google_rating: comp.google_rating,
         total_reviews: comp.total_reviews,
-        rating_gap:    ratingGap,
-        weaknesses:    Array.isArray(insight?.weaknesses)     ? insight.weaknesses     : [],
-        they_do_better: Array.isArray(insight?.they_do_better) ? insight.they_do_better : [],
-        opportunities:  Array.isArray(insight?.opportunities)  ? insight.opportunities  : [],
+        rating_gap:    ratingGap ?? 0,
+        no_reviews,
+        weaknesses,
+        they_do_better,
+        opportunities,
       };
     });
 
