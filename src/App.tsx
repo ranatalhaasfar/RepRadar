@@ -13,6 +13,7 @@ import Dashboard from './pages/Dashboard'
 import ReviewResponder from './pages/ReviewResponder'
 import CompetitorSpy from './pages/CompetitorSpy'
 import AIInsights from './pages/AIInsights'
+import Intelligence from './pages/Intelligence'
 import AlertSettings from './pages/AlertSettings'
 
 // ── Admin ──────────────────────────────────────────────────────────────────
@@ -24,7 +25,7 @@ const isAdmin = (email: string | null | undefined): boolean =>
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-type Page     = 'dashboard' | 'responder' | 'competitors' | 'insights' | 'alerts'
+type Page     = 'dashboard' | 'responder' | 'competitors' | 'insights' | 'intelligence' | 'alerts'
 type AuthPage = 'login' | 'signup' | 'forgot'
 
 type NavItem = {
@@ -35,19 +36,21 @@ type NavItem = {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard',   label: 'Dashboard',       icon: '📊' },
-  { id: 'responder',   label: 'Responder',        icon: '✍️' },
-  { id: 'competitors', label: 'Competitors',      icon: '🔍' },
-  { id: 'insights',    label: 'AI Insights',      icon: '🧠', badge: 'AI' },
-  { id: 'alerts',      label: 'Alerts',           icon: '🔔' },
+  { id: 'dashboard',    label: 'Dashboard',       icon: '📊' },
+  { id: 'responder',    label: 'Responder',        icon: '✍️' },
+  { id: 'competitors',  label: 'Competitors',      icon: '🔍' },
+  { id: 'insights',     label: 'AI Insights',      icon: '🧠', badge: 'AI' },
+  { id: 'intelligence', label: 'Intelligence',     icon: '🎯', badge: 'NEW' },
+  { id: 'alerts',       label: 'Alerts',           icon: '🔔' },
 ]
 
 const PAGE_TITLES: Record<Page, string> = {
-  dashboard:   'Dashboard',
-  responder:   'Review Responder',
-  competitors: 'Competitor Spy',
-  insights:    'AI Insights',
-  alerts:      'Alert Settings',
+  dashboard:    'Dashboard',
+  responder:    'Review Responder',
+  competitors:  'Competitor Spy',
+  insights:     'AI Insights',
+  intelligence: 'Intelligence',
+  alerts:       'Alert Settings',
 }
 
 // ── Sidebar ────────────────────────────────────────────────────────────────
@@ -518,8 +521,9 @@ function AuthenticatedApp() {
           <div className={page === 'dashboard'   ? '' : 'hidden'}><Dashboard /></div>
           <div className={page === 'responder'   ? '' : 'hidden'}><ReviewResponder /></div>
           <div className={page === 'competitors' ? '' : 'hidden'}><CompetitorSpy /></div>
-          <div className={page === 'insights'    ? '' : 'hidden'}><AIInsights /></div>
-          <div className={page === 'alerts'      ? '' : 'hidden'}><AlertSettings /></div>
+          <div className={page === 'insights'      ? '' : 'hidden'}><AIInsights /></div>
+          <div className={page === 'intelligence' ? '' : 'hidden'}><Intelligence /></div>
+          <div className={page === 'alerts'       ? '' : 'hidden'}><AlertSettings /></div>
         </main>
       </div>
 
