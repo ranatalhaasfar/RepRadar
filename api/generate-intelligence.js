@@ -97,18 +97,29 @@ export default async function handler(req, res) {
       return res.status(422).json({ error: 'insufficient_reviews', count: reviews.length });
     }
 
-    // ── Fetch competitors (metadata only — reviews are not stored in DB) ──────
+    // ── Fetch competitors + their fetched review counts ──────────────────
     const { data: competitors } = await supabase
       .from('competitors')
       .select('id, name, google_rating, total_reviews')
       .eq('business_id', business_id);
 
     console.log(`[intelligence] competitors found: ${competitors?.length ?? 0}`);
-    if (competitors?.length) {
-      console.log('[intelligence] competitor sample:', JSON.stringify(competitors[0]));
-    }
 
-    const competitorData = competitors ?? [];
+    // Count how many of our own reviews are in the DB (may differ from reviews.length if sliced)
+    const { count: myFetchedCount } = await supabase
+      .from('reviews')
+      .select('*', { count: 'exact', head: true })
+      .eq('business_id', business_id);
+
+    // Count fetched reviews for each competitor (stored under their own ID if imported)
+    const competitorData = await Promise.all((competitors ?? []).map(async comp => {
+      const { count: compFetchedCount } = await supabase
+        .from('reviews')
+        .select('*', { count: 'exact', head: true })
+        .eq('business_id', comp.id);
+      console.log(`[intelligence] ${comp.name}: ${compFetchedCount ?? 0} fetched reviews in DB`);
+      return { ...comp, fetched_count: compFetchedCount ?? 0 };
+    }));
 
     // ── Build weekly buckets (last 8 weeks) ───────────────────────────────
     const now = new Date();
@@ -297,64 +308,58 @@ export default async function handler(req, res) {
     const myAvgRating = reviews.length > 0
       ? reviews.reduce((s, r) => s + (r.rating ?? 4), 0) / reviews.length
       : 4;
-    const myReviewCount = reviews.length;
+    const myReviewCount = myFetchedCount ?? reviews.length;
 
     const competitor_analysis = competitorData.map(comp => {
-      const compRating     = comp.google_rating ?? null;
-      const compCount      = comp.total_reviews ?? null;
-      const ratingGap      = compRating != null ? Math.round((myAvgRating - compRating) * 10) / 10 : null;
+      const compRating    = comp.google_rating ?? null;
+      const compCount     = comp.fetched_count; // reviews actually in DB, not Google total
+      const ratingGap     = compRating != null ? Math.round((myAvgRating - compRating) * 10) / 10 : null;
+      const hasCompReviews = compCount > 0;
 
       // ── They Beat Us: only real, numbered facts ──
       const they_do_better = [];
-      if (compCount != null && myReviewCount > 0 && compCount > myReviewCount) {
-        const ratio = (compCount / myReviewCount).toFixed(1);
+      if (hasCompReviews && compCount > myReviewCount) {
+        const ratio = (compCount / Math.max(myReviewCount, 1)).toFixed(1);
         they_do_better.push(
-          `${compCount.toLocaleString()} reviews vs your ${myReviewCount.toLocaleString()} — ${ratio}x more social proof`
+          `${compCount.toLocaleString()} fetched reviews vs your ${myReviewCount.toLocaleString()} — ${ratio}x more data analysed`
         );
       }
       if (ratingGap != null && ratingGap < 0) {
-        // They have higher rating
         they_do_better.push(
-          `Higher rating by ${Math.abs(ratingGap).toFixed(1)} stars (${compRating} vs your ${myAvgRating.toFixed(1)})`
+          `Higher Google rating by ${Math.abs(ratingGap).toFixed(1)} stars (${compRating} vs your ${myAvgRating.toFixed(1)})`
         );
       }
-      if (they_do_better.length === 0 && compCount != null && compCount > myReviewCount) {
-        they_do_better.push(`${compCount.toLocaleString()} total reviews — stronger review volume`);
-      }
 
-      // ── Their Complaints: use our own top problems as proxy ──
-      // We don't have their review text, so we surface our shared problems
-      // (issues common to this business type) with actual mention counts.
-      // Only include problems with 3+ mentions (significant threshold).
-      const no_reviews = true; // competitor review text not in DB
-      const weaknesses = problems
-        .filter(p => p.mention_count >= 3)
-        .slice(0, 4)
-        .map(p => `"${p.name}" — mentioned in ${p.mention_count} of your reviews (likely affects competitors too)`);
+      // ── Their Complaints: only if we have their review data ──
+      const no_reviews = !hasCompReviews;
+      const weaknesses = hasCompReviews
+        ? problems
+            .filter(p => p.mention_count >= 3)
+            .slice(0, 4)
+            .map(p => `"${p.name}" — ${p.mention_count} mentions in analysed reviews`)
+        : [];
 
       // ── Our Opportunity: only include if we actually have the advantage ──
       const opportunities = [];
       if (ratingGap != null && ratingGap > 0) {
         opportunities.push(
-          `You rate ${ratingGap.toFixed(1)} stars higher (${myAvgRating.toFixed(1)} vs ${compRating}) — mention this in your marketing`
+          `You rate ${ratingGap.toFixed(1)} stars higher on Google (${myAvgRating.toFixed(1)} vs ${compRating}) — use this in your marketing`
         );
       }
-      if (compCount != null && myReviewCount > compCount) {
+      if (hasCompReviews && myReviewCount > compCount) {
         opportunities.push(
-          `You have ${myReviewCount.toLocaleString()} reviews vs their ${compCount.toLocaleString()} — you have stronger social proof`
+          `You have ${myReviewCount.toLocaleString()} fetched reviews vs their ${compCount.toLocaleString()} — stronger data coverage`
         );
       }
-      // Top worsening problem = opportunity to differentiate if we fix it first
       const worseningProblem = problems.find(p => p.trend === 'worsening' && p.mention_count >= 3);
       if (worseningProblem) {
         opportunities.push(
           `Fix "${worseningProblem.name}" before competitors do — ${worseningProblem.mention_count} mentions and worsening`
         );
       }
-      // If they have more reviews, prompt for a review campaign
-      if (compCount != null && compCount > myReviewCount * 2) {
+      if (!hasCompReviews) {
         opportunities.push(
-          `Launch a review request campaign — close the ${Math.round(compCount / Math.max(myReviewCount, 1))}x review gap`
+          `Run Competitor Spy to fetch their reviews and unlock a full side-by-side comparison`
         );
       }
 
@@ -363,6 +368,7 @@ export default async function handler(req, res) {
         name:          comp.name,
         google_rating: comp.google_rating,
         total_reviews: comp.total_reviews,
+        fetched_count: compCount,
         rating_gap:    ratingGap ?? 0,
         no_reviews,
         weaknesses,

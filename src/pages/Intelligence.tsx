@@ -627,9 +627,9 @@ function CompetitorSection({ competitors }: { competitors: CompetitorAnalysis[];
                   {comp.total_reviews != null && (
                     <span>{comp.total_reviews.toLocaleString()} reviews</span>
                   )}
-                  {comp.google_rating != null && (
-                    <span className={`font-semibold ${gap > 0 ? 'text-emerald-400' : gap < 0 ? 'text-red-400' : 'text-gray-400'}`}>
-                      {gap > 0 ? `+${gap}` : gap} vs you
+                  {comp.google_rating != null && gap !== 0 && (
+                    <span className={`font-semibold ${gap > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {gap > 0 ? `+${gap} vs them` : `${gap} vs you`}
                     </span>
                   )}
                 </div>
