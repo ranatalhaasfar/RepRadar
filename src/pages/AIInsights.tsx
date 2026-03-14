@@ -120,10 +120,10 @@ export default function AIInsights() {
     console.log('Business ID:', bizId)
     console.log('localStorage key:', localKey)
     console.log('localStorage raw value:', rawCached ? `${rawCached.slice(0, 120)}…` : 'null (nothing saved)')
-    console.log('Zustand insights count:', insights.length, '| insightsBusinessId:', insightsBusinessId)
+    console.log('Zustand insights count:', Array.isArray(insights) ? insights.length : '(non-array)', '| insightsBusinessId:', insightsBusinessId)
 
     // ─── Layer 1: Zustand store (in-memory, survives tab switches but not refreshes) ───
-    if (insightsBusinessId === bizId && insights.length > 0) {
+    if (insightsBusinessId === bizId && Array.isArray(insights) && insights.length > 0) {
       console.log('[AIInsights] ✅ Layer 1 hit — Zustand store')
       setCacheSource('zustand')
       return
@@ -134,13 +134,14 @@ export default function AIInsights() {
     if (rawCached) {
       try {
         const parsed = JSON.parse(rawCached) as { data: Insight[]; savedAt: number }
-        if (parsed?.data && parsed.data.length > 0) {
+        if (Array.isArray(parsed?.data) && parsed.data.length > 0) {
           console.log('[AIInsights] ✅ Layer 2 hit — localStorage', parsed.data.length, 'insights, saved at', new Date(parsed.savedAt).toLocaleTimeString())
           setInsights(parsed.data, bizId)
           setCacheSource('localStorage')
           return
         } else {
-          console.log('[AIInsights] ⚠ localStorage key exists but data is empty/malformed:', parsed)
+          console.log('[AIInsights] ⚠ localStorage key exists but data is empty/malformed — clearing:', parsed)
+          localStorage.removeItem(localKey)
         }
       } catch (e) {
         console.log('[AIInsights] ⚠ localStorage parse error:', e)
@@ -279,7 +280,8 @@ export default function AIInsights() {
     })
   }
 
-  const filtered = filter === 'All' ? insights : insights.filter(i => i.impact === filter)
+  const safeInsights = Array.isArray(insights) ? insights : []
+  const filtered = filter === 'All' ? safeInsights : safeInsights.filter(i => i.impact === filter)
 
   const cacheLabel = cacheSource === 'zustand'
     ? '⚡ From memory'
@@ -353,7 +355,7 @@ export default function AIInsights() {
       )}
 
       {/* Empty state */}
-      {!error && insights.length === 0 && (
+      {!error && safeInsights.length === 0 && (
         <div className="card p-8 text-center">
           <p className="text-3xl mb-3">{noReviews ? '📋' : '🧠'}</p>
           <p className="text-sm text-gray-300 font-medium mb-1">
@@ -367,15 +369,15 @@ export default function AIInsights() {
         </div>
       )}
 
-      {insights.length > 0 && (
+      {safeInsights.length > 0 && (
         <>
           {/* Summary bar */}
           <div className="card p-4 flex flex-wrap gap-4">
             {[
-              { label: 'Total Insights', value: insights.length,                                      color: 'text-gray-200'  },
-              { label: 'High Impact',    value: insights.filter(i => i.impact === 'High').length,   color: 'text-red-400'   },
-              { label: 'Medium Impact',  value: insights.filter(i => i.impact === 'Medium').length, color: 'text-amber-400' },
-              { label: 'Low Impact',     value: insights.filter(i => i.impact === 'Low').length,    color: 'text-blue-400'  },
+              { label: 'Total Insights', value: safeInsights.length,                                          color: 'text-gray-200'  },
+              { label: 'High Impact',    value: safeInsights.filter(i => i.impact === 'High').length,   color: 'text-red-400'   },
+              { label: 'Medium Impact',  value: safeInsights.filter(i => i.impact === 'Medium').length, color: 'text-amber-400' },
+              { label: 'Low Impact',     value: safeInsights.filter(i => i.impact === 'Low').length,    color: 'text-blue-400'  },
             ].map(({ label, value, color }) => (
               <div key={label} className="flex items-center gap-2">
                 <span className={`text-xl font-bold ${color}`}>{value}</span>

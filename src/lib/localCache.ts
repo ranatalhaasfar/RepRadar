@@ -20,11 +20,18 @@ export function lcSave<T>(namespace: string, businessId: string, data: T): void 
 }
 
 export function lcLoad<T>(namespace: string, businessId: string): { data: T; savedAt: number } | null {
+  const k = key(namespace, businessId)
   try {
-    const raw = localStorage.getItem(key(namespace, businessId))
+    const raw = localStorage.getItem(k)
     if (!raw) return null
-    return JSON.parse(raw) as { data: T; savedAt: number }
+    const parsed = JSON.parse(raw) as { data: T; savedAt: number }
+    if (parsed == null || parsed.data == null) {
+      localStorage.removeItem(k)
+      return null
+    }
+    return parsed
   } catch {
+    localStorage.removeItem(k)
     return null
   }
 }

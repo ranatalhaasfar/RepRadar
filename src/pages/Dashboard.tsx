@@ -325,7 +325,7 @@ export default function Dashboard() {
 
     // 2️⃣ localStorage hit — survives browser refresh
     const lsData = lcLoad<{ business: Business; reviews: Review[] }>('reviews', bizData.id)
-    if (lsData && lsData.data.reviews.length > 0) {
+    if (lsData && Array.isArray(lsData.data?.reviews) && lsData.data.reviews.length > 0) {
       console.log('[Dashboard] ✅ Layer 2 hit — localStorage', `(saved ${new Date(lsData.savedAt).toLocaleTimeString()})`)
       const { business: cachedBiz, reviews: cachedRevs } = lsData.data
       setDashboard(cachedBiz, cachedRevs, bizData.id)
@@ -602,7 +602,7 @@ export default function Dashboard() {
 
     // 2️⃣ localStorage hit
     const lsCats = lcLoad<Category[]>('categories', activeBusiness.id)
-    if (lsCats && lsCats.data.length > 0) {
+    if (lsCats && Array.isArray(lsCats.data) && lsCats.data.length > 0) {
       console.log('[Dashboard] ✅ Categories Layer 2 hit — localStorage')
       setCategories(lsCats.data, activeBusiness.id)
       return
