@@ -1,6 +1,15 @@
 import { getClient, getSupabase } from './_lib/shared.js';
 import { extractJSONObject } from './utils/extractJSON.js';
 
+function sanitizeText(text) {
+  if (!text) return ''
+  return text
+    .replace(/[\uD800-\uDFFF]/g, '')
+    .replace(/\0/g, '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .trim()
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -83,10 +92,12 @@ export default async function handler(req, res) {
     // ── Haiku call: detect top complaints + weekly brief ──────────────────
     const sample = reviews
       .slice(0, 80)
-      .map(r => `[${r.sentiment ?? 'unknown'}] ${(r.review_text || '').substring(0, 100)}`)
+      .map(r => `[${r.sentiment ?? 'unknown'}] ${sanitizeText(r.review_text).substring(0, 100)}`)
       .join('\n');
 
     const weekStr = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const safeName = sanitizeText(business_name);
+    const safeType = sanitizeText(business_type);
 
     const response = await getClient().messages.create({
       model: 'claude-haiku-4-5-20251001',
@@ -95,7 +106,7 @@ export default async function handler(req, res) {
       messages: [{
         role: 'user',
         content:
-          `Analyze these customer reviews for "${business_name}" (${business_type}).\n\n` +
+          `Analyze these customer reviews for "${safeName}" (${safeType}).\n\n` +
           `Return a JSON object with EXACTLY this shape:\n` +
           `{\n` +
           `  "problems": [\n` +
