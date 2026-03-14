@@ -137,27 +137,7 @@ function AnimatedNumber({ target }: { target: number }) {
   return <>{val}</>
 }
 
-// ── Loading Skeleton ───────────────────────────────────────────────────────
 
-function Skeleton({ className }: { className?: string }) {
-  return <div className={`bg-[#1e2d4a]/60 rounded-lg animate-pulse ${className ?? ''}`} />
-}
-
-function LoadingSkeleton() {
-  return (
-    <div className="space-y-6">
-      <Skeleton className="h-20 rounded-2xl" />
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Skeleton className="h-72" />
-        <Skeleton className="h-72" />
-        <Skeleton className="h-72" />
-      </div>
-      <Skeleton className="h-48" />
-      <Skeleton className="h-56" />
-      <Skeleton className="h-40" />
-    </div>
-  )
-}
 
 // ── Trend Badge ────────────────────────────────────────────────────────────
 
@@ -920,47 +900,51 @@ type ReviewRow = {
   reviewed_at:   string | null
 }
 
-function ReviewModal({ indices, matchReasons, onClose }: {
+function ReviewModal({ indices, matchReasons, bizId, onClose }: {
   indices:      number[]
   matchReasons: MatchReason[]
+  bizId:        string
   onClose:      () => void
 }) {
-  const { activeBusiness } = useAppStore()
-  const [allReviews, setAllReviews] = useState<ReviewRow[]>([])
-  const [loading, setLoading] = useState(true)
+  const [allReviews, setAllReviews]     = useState<ReviewRow[]>([])
+  const [reasonMap, setReasonMap]       = useState<Map<number, MatchReason>>(new Map())
+  const [loading, setLoading]           = useState(true)
+  const [fetchError, setFetchError]     = useState('')
 
   useEffect(() => {
-    if (!activeBusiness || indices.length === 0) { setLoading(false); return }
+    if (!bizId || indices.length === 0) { setLoading(false); return }
+    // Fetch ALL reviews for this business ordered the same way as the API (reviewed_at desc)
+    // then pick by index — must match the API's fetch order exactly
     supabase
       .from('reviews')
       .select('review_text, reviewer_name, rating, sentiment, reviewed_at')
-      .eq('business_id', activeBusiness.id)
-      .then(({ data }) => {
-        if (data) {
-          const matched: ReviewRow[] = indices.map(i => data[i]).filter(Boolean)
-          // Sort: lowest rating first, then most recent, then longest text
-          matched.sort((a, b) => {
-            const ratingA = a.rating ?? 5
-            const ratingB = b.rating ?? 5
-            if (ratingA !== ratingB) return ratingA - ratingB
-            const dateA = a.reviewed_at ? new Date(a.reviewed_at).getTime() : 0
-            const dateB = b.reviewed_at ? new Date(b.reviewed_at).getTime() : 0
-            if (dateA !== dateB) return dateB - dateA
-            return (b.review_text?.length ?? 0) - (a.review_text?.length ?? 0)
-          })
-          setAllReviews(matched)
-        }
+      .eq('business_id', bizId)
+      .order('reviewed_at', { ascending: false })
+      .then(({ data, error: err }) => {
+        if (err || !data) { setFetchError('Failed to load reviews'); setLoading(false); return }
+        const matched: (ReviewRow & { originalIndex: number })[] = indices
+          .map(i => data[i] ? { ...data[i], originalIndex: i } : null)
+          .filter((r): r is ReviewRow & { originalIndex: number } => r !== null)
+        // Sort: lowest rating first, most recent, longest text
+        matched.sort((a, b) => {
+          const rA = a.rating ?? 5, rB = b.rating ?? 5
+          if (rA !== rB) return rA - rB
+          const dA = a.reviewed_at ? new Date(a.reviewed_at).getTime() : 0
+          const dB = b.reviewed_at ? new Date(b.reviewed_at).getTime() : 0
+          if (dA !== dB) return dB - dA
+          return (b.review_text?.length ?? 0) - (a.review_text?.length ?? 0)
+        })
+        setAllReviews(matched)
+        setReasonMap(new Map(matchReasons.map(r => [r.index, r])))
         setLoading(false)
       })
-  }, [])
-
-  const reasonByIndex = new Map<number, MatchReason>(matchReasons.map(r => [r.index, r]))
+  }, [bizId, indices.join(',')])
 
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-[#0f1629] border border-[#1e2d4a] rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#1e2d4a]">
-          <p className="text-sm font-semibold text-gray-200">Related Reviews ({indices.length})</p>
+          <p className="text-sm font-semibold text-gray-200">Related Negative Reviews ({allReviews.length || indices.length})</p>
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-gray-500 hover:text-gray-200 hover:bg-white/5 transition-colors"
@@ -972,9 +956,12 @@ function ReviewModal({ indices, matchReasons, onClose }: {
         </div>
         <div className="overflow-y-auto p-4 space-y-3">
           {loading && <div className="text-center text-xs text-gray-500 py-6">Loading reviews…</div>}
-          {allReviews.map((r, i) => {
-            const originalIndex = indices[i]
-            const reason = reasonByIndex.get(originalIndex)
+          {!loading && fetchError && <div className="text-center text-xs text-red-400 py-6">{fetchError}</div>}
+          {!loading && !fetchError && allReviews.length === 0 && (
+            <div className="text-center text-xs text-gray-500 py-6">No matching reviews found</div>
+          )}
+          {(allReviews as (ReviewRow & { originalIndex: number })[]).map((r, i) => {
+            const reason = reasonMap.get(r.originalIndex)
             return (
               <div key={i} className="bg-[#080d1a] border border-[#1e2d4a] rounded-xl p-3 space-y-1.5">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -993,10 +980,10 @@ function ReviewModal({ indices, matchReasons, onClose }: {
                     <span className="text-[10px] text-gray-600">{relativeTime(r.reviewed_at)}</span>
                   )}
                 </div>
-                <p className="text-xs text-gray-400 leading-relaxed">{r.review_text}</p>
+                <p className="text-xs text-gray-400 leading-relaxed">{r.review_text || '(no text)'}</p>
                 {reason && (
-                  <div className="text-[10px] text-purple-400/70 mt-1">
-                    Matched: "{reason.matchedKeyword}"{reason.matchedIndicator ? ` + "${reason.matchedIndicator}"` : ''} in negative review
+                  <div className="text-[10px] text-purple-400/70">
+                    Matched: "{reason.matchedKeyword}"{reason.matchedIndicator ? ` + "${reason.matchedIndicator}"` : ''} · negative review
                   </div>
                 )}
               </div>
@@ -1010,47 +997,57 @@ function ReviewModal({ indices, matchReasons, onClose }: {
 
 // ── Page Header ────────────────────────────────────────────────────────────
 
-function Header({ onRefresh, generating, report }: {
-  onRefresh:  () => void
-  generating: boolean
-  report:     IntelReport | null
+function PageHeader({ businessName, report, generating, onGenerate, onDownload }: {
+  businessName: string
+  report:       IntelReport | null
+  generating:   boolean
+  onGenerate:   () => void
+  onDownload:   (() => void) | null
 }) {
   const isStale = report?.stale_after ? new Date(report.stale_after) < new Date() : false
 
   return (
     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-100">Intelligence</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-100">
+          Intelligence
+          {businessName && <span className="text-gray-500 font-normal text-base"> — {businessName}</span>}
+        </h1>
         <div className="flex items-center gap-2 mt-1 flex-wrap">
-          {report?.cached && <span className="text-xs text-emerald-500">From cache</span>}
           {report?.generated_at && (
             <p className="text-xs text-gray-500">
-              {report.cached ? '· ' : ''}Last generated {relativeTime(report.generated_at)} · Cached 7 days
+              Generated {relativeTime(report.generated_at)} · refreshes every 7 days
             </p>
           )}
-          {isStale && report?.generated_at && (
-            <span className="text-xs text-amber-500/70 italic">
-              Data may be stale — generated {relativeTime(report.generated_at)}
-            </span>
-          )}
-          {!report && <p className="text-xs text-gray-500">Premium intelligence briefing for your business</p>}
+          {isStale && <span className="text-xs text-amber-500/70 italic">Data may be stale</span>}
+          {!report && <p className="text-xs text-gray-500">Premium intelligence briefing</p>}
         </div>
       </div>
-      <button
-        onClick={onRefresh}
-        disabled={generating}
-        className="btn-primary w-full sm:w-auto px-4 py-2 min-h-[44px] text-xs flex items-center justify-center gap-1.5"
-      >
-        {generating ? (
-          <>
-            <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            Analyzing…
-          </>
-        ) : '🎯 Refresh Intelligence'}
-      </button>
+      <div className="flex gap-2 flex-wrap shrink-0">
+        {onDownload && report && (
+          <button
+            onClick={onDownload}
+            className="px-3 py-2 min-h-[40px] text-xs text-purple-400 border border-purple-500/30 hover:bg-purple-500/10 rounded-lg transition-all flex items-center gap-1.5"
+          >
+            ⬇ Download Report
+          </button>
+        )}
+        <button
+          onClick={onGenerate}
+          disabled={generating}
+          className="btn-primary px-4 py-2 min-h-[40px] text-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
+        >
+          {generating ? (
+            <>
+              <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Analysing…
+            </>
+          ) : report ? '🔄 Regenerate' : '🎯 Generate'}
+        </button>
+      </div>
     </div>
   )
 }
@@ -1087,37 +1084,124 @@ function normalizeReport(raw: Record<string, unknown>): IntelReport {
   }
 }
 
+// ── PDF Export ─────────────────────────────────────────────────────────────
+
+function downloadPDF(report: IntelReport, businessName: string) {
+  const lines: string[] = []
+  const push = (s: string) => lines.push(s)
+
+  push(`INTELLIGENCE REPORT — ${businessName.toUpperCase()}`)
+  push(`Generated: ${new Date(report.generated_at).toLocaleString()}`)
+  push(`Health Score: ${report.health_score}/100  |  Crisis Status: ${report.crisis_status.toUpperCase()}`)
+  push(`Total Reviews Analysed: ${report.total_reviews}`)
+  push('')
+  push('━━━ TOP PROBLEMS ━━━')
+  for (const p of report.problems) {
+    push(`\n#${p.rank} ${p.name} [${p.severity.toUpperCase()}]`)
+    push(`  Mentions: ${p.mention_count} · Trend: ${p.trend} ${p.trend_pct}%`)
+    if (p.first_seen) push(`  First seen: ${weeksAgo(p.first_seen)}`)
+    if (p.low_star_correlation > 0) push(`  Linked to ${p.low_star_correlation} low-star reviews`)
+    if (p.specific_action) push(`  Action: ${p.specific_action}`)
+    for (const s of p.snippets.slice(0, 2)) push(`  › "${s}"`)
+  }
+  push('')
+  push('━━━ WEEKLY BRIEF ━━━')
+  push(report.weekly_brief.narrative || '')
+  push('')
+  push(`#1 Priority: ${report.weekly_brief.top_priority}`)
+  push(`Biggest Win: ${report.weekly_brief.biggest_win}`)
+  push('')
+  push('Action Items:')
+  for (const item of report.weekly_brief.action_items) push(`  ☐ ${item}`)
+  push('')
+  push('━━━ HEALTH SCORE BREAKDOWN ━━━')
+  if (report.health_breakdown) {
+    for (const d of report.health_breakdown.deductions) {
+      push(`  ${d.name}: ${d.points}pts (${d.severity}, ${d.trend})`)
+    }
+    push(`  Fix top issue alone → ${report.health_breakdown.score_if_fixed_top1}/100`)
+    push(`  Fix top 3 issues   → ${report.health_breakdown.score_if_fixed_top3}/100`)
+  }
+  push('')
+  push('━━━ UNANSWERED REVIEWS ━━━')
+  push(`  ${report.unanswered_count} negative reviews without a response`)
+  if (report.oldest_unanswered) push(`  Oldest: ${relativeTime(report.oldest_unanswered)}`)
+
+  const content = lines.join('\n')
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `intelligence-report-${businessName.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}.txt`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────
 
 export default function Intelligence() {
-  const { user }                      = useAuth()
-  const { activeBusiness, setPendingNavPage } = useAppStore()
+  useAuth() // ensure auth context is active
+  const { activeBusiness, setPendingNavPage }           = useAppStore()
+  const businessId   = activeBusiness?.id ?? null
+  const businessName = activeBusiness?.name ?? ''
 
-  const [report, setReport]       = useState<IntelReport | null>(null)
-  const [loading, setLoading]     = useState(false)
-  const [generating, setGenerating] = useState(false)
-  const [error, setError]         = useState('')
-  const [reviewModal, setReviewModal] = useState<{ indices: number[]; matchReasons: MatchReason[] } | null>(null)
+  const [report, setReport]           = useState<IntelReport | null>(null)
+  const [reportBizId, setReportBizId] = useState<string | null>(null) // which biz the loaded report belongs to
+  const [generating, setGenerating]   = useState(false)
+  const [error, setError]             = useState('')
+  const [reviewModal, setReviewModal] = useState<{ indices: number[]; matchReasons: MatchReason[]; bizId: string } | null>(null)
 
+  // Clear report immediately when business changes
   useEffect(() => {
-    if (!user || !activeBusiness) return
-    loadReport(false)
-  }, [user?.id, activeBusiness?.id])
-
-  const loadReport = async (forceRefresh: boolean) => {
-    if (!activeBusiness) return
-    forceRefresh ? setGenerating(true) : setLoading(true)
+    setReport(null)
+    setReportBizId(null)
     setError('')
+  }, [businessId])
 
+  // Load from localStorage cache when business changes (never auto-call API)
+  useEffect(() => {
+    if (!businessId) return
+    const cacheKey = `repradar_intelligence_${businessId}`
+    try {
+      const raw = localStorage.getItem(cacheKey)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as { businessId: string; data: Record<string, unknown>; savedAt: string }
+      // Strict business ID check
+      if (parsed.businessId !== businessId) {
+        localStorage.removeItem(cacheKey)
+        return
+      }
+      const sevenDays = 7 * 24 * 60 * 60 * 1000
+      if (Date.now() - new Date(parsed.savedAt).getTime() > sevenDays) {
+        localStorage.removeItem(cacheKey)
+        return
+      }
+      const normalized = normalizeReport(parsed.data)
+      // Final guard: report must be for this business
+      if (normalized.business_id && normalized.business_id !== businessId) return
+      setReport(normalized)
+      setReportBizId(businessId)
+    } catch {
+      localStorage.removeItem(cacheKey)
+    }
+  }, [businessId])
+
+  const generateReport = async () => {
+    if (!activeBusiness || !businessId) return
+    const currentBizId = businessId // capture at call time
+    setGenerating(true)
+    setError('')
     try {
       const res = await fetch('/api/generate-intelligence', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          business_id:   activeBusiness.id,
+          business_id:   currentBizId,
           business_name: activeBusiness.name,
           business_type: activeBusiness.type,
-          force_refresh: forceRefresh,
+          force_refresh: true,
         }),
       })
 
@@ -1131,11 +1215,21 @@ export default function Intelligence() {
       }
 
       const raw = await res.json()
-      setReport(normalizeReport(raw))
+      // Guard: only use result if still on same business
+      if (businessId !== currentBizId) return
+      const normalized = normalizeReport({ ...raw, business_id: currentBizId })
+      setReport(normalized)
+      setReportBizId(currentBizId)
+      // Save to per-business localStorage cache
+      const cacheKey = `repradar_intelligence_${currentBizId}`
+      localStorage.setItem(cacheKey, JSON.stringify({
+        businessId: currentBizId,
+        data: { ...raw, business_id: currentBizId },
+        savedAt: new Date().toISOString(),
+      }))
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to generate intelligence report')
     } finally {
-      setLoading(false)
       setGenerating(false)
     }
   }
@@ -1150,31 +1244,18 @@ export default function Intelligence() {
     )
   }
 
-  // ── Loading ──
-  if (loading) return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-100">Intelligence</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Building your intelligence report…</p>
-        </div>
-      </div>
-      <LoadingSkeleton />
-    </div>
-  )
-
   // ── Insufficient reviews ──
   if (error.startsWith('insufficient_reviews')) {
     const count = parseInt(error.split(':')[1] ?? '0')
     return (
       <div className="space-y-6">
-        <Header onRefresh={() => loadReport(true)} generating={generating} report={report} />
+        <PageHeader businessName={businessName} report={null} generating={generating} onGenerate={generateReport} onDownload={null} />
         <div className="card p-10 text-center space-y-3">
           <p className="text-4xl">📋</p>
           <p className="text-base font-semibold text-gray-200">Not enough reviews yet</p>
           <p className="text-sm text-gray-400">
             You have <span className="text-white font-bold">{count}</span> review{count !== 1 ? 's' : ''}.
-            Intelligence requires at least <span className="text-white font-bold">20</span> reviews for accurate problem detection.
+            Intelligence requires at least <span className="text-white font-bold">5</span> reviews to generate.
           </p>
           <p className="text-xs text-gray-600">Fetch more reviews from the Dashboard to unlock this feature.</p>
         </div>
@@ -1186,34 +1267,37 @@ export default function Intelligence() {
   if (error && !report) {
     return (
       <div className="space-y-6">
-        <Header onRefresh={() => loadReport(true)} generating={generating} report={report} />
+        <PageHeader businessName={businessName} report={null} generating={generating} onGenerate={generateReport} onDownload={null} />
         <div className="card p-6 flex items-center gap-3 text-red-400 text-sm">
           <span>⚠</span>
           <span>{error}</span>
-          <button onClick={() => loadReport(false)} className="ml-auto underline text-xs hover:no-underline">Retry</button>
+          <button onClick={generateReport} className="ml-auto underline text-xs hover:no-underline">Retry</button>
         </div>
       </div>
     )
   }
 
-  // ── No report yet ──
-  if (!report) {
+  // ── No report yet — first screen with CTA ──
+  if (!report || reportBizId !== businessId) {
     return (
       <div className="space-y-6">
-        <Header onRefresh={() => loadReport(true)} generating={generating} report={null} />
-        <div className="card p-10 text-center space-y-4">
-          <p className="text-5xl">🎯</p>
-          <p className="text-base font-semibold text-gray-200">Your Intelligence Briefing Awaits</p>
-          <p className="text-sm text-gray-400 max-w-sm mx-auto">
-            Detect your top problems, track trends, analyze competitors, and get your weekly brief — all in one place.
+        <PageHeader businessName={businessName} report={null} generating={generating} onGenerate={generateReport} onDownload={null} />
+        <div className="card p-10 text-center space-y-5">
+          <p className="text-6xl">🎯</p>
+          <div>
+            <p className="text-lg font-bold text-gray-100">Generate Intelligence Report</p>
+            <p className="text-sm text-gray-400 mt-1">for {businessName}</p>
+          </div>
+          <p className="text-sm text-gray-500 max-w-md mx-auto leading-relaxed">
+            Detects your top problems, tracks complaint trends, analyses competitors, and produces a frank weekly brief — powered by Claude Sonnet.
           </p>
-          <p className="text-xs text-gray-500 max-w-sm mx-auto italic">
-            Uses Claude Sonnet for deeper analysis than standard AI Insights.
-          </p>
+          <div className="text-xs text-gray-600 italic">
+            AI Insights shows what customers say. Intelligence shows what it means and what to do about it.
+          </div>
           <button
-            onClick={() => loadReport(true)}
+            onClick={generateReport}
             disabled={generating}
-            className="btn-primary px-6 py-3 text-sm mx-auto flex items-center gap-2"
+            className="btn-primary px-8 py-3 text-sm mx-auto flex items-center gap-2"
           >
             {generating ? (
               <>
@@ -1221,7 +1305,7 @@ export default function Intelligence() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                Analyzing reviews…
+                Analysing reviews… this takes ~15 seconds
               </>
             ) : '🎯 Generate Intelligence Report'}
           </button>
@@ -1231,13 +1315,23 @@ export default function Intelligence() {
   }
 
   const maxCount = Math.max(1, ...report.problems.map(p => p.mention_count))
+  // Fallback week_buckets: generate labels if empty (cached rows may lack this field)
+  const weekBuckets = (Array.isArray(report.week_buckets) && report.week_buckets.length > 0)
+    ? report.week_buckets
+    : Array.from({ length: 8 }, (_, i) => `W${i + 1}`)
 
   return (
-    <div className="space-y-6 pb-4">
-      <Header onRefresh={() => loadReport(true)} generating={generating} report={report} />
+    <div className="space-y-6 pb-4" id="intelligence-report">
+      <PageHeader
+        businessName={businessName}
+        report={report}
+        generating={generating}
+        onGenerate={generateReport}
+        onDownload={() => downloadPDF(report, businessName)}
+      />
 
       {/* Differentiation banner */}
-      <div className="text-xs text-gray-600 italic border-b border-[#1e2d4a] pb-3 mb-1">
+      <div className="text-xs text-gray-600 italic border-b border-[#1e2d4a] pb-3">
         AI Insights shows what customers say. Intelligence shows what it means for your business and what to do about it.
       </div>
 
@@ -1250,7 +1344,7 @@ export default function Intelligence() {
           <div>
             <h2 className="text-base font-bold text-gray-100 mb-1">Top Problems Detected</h2>
             <p className="text-xs text-gray-500">
-              Detected from {report.total_reviews} reviews — only reviews that are both topically relevant AND negative are counted
+              From {report.total_reviews} reviews — only reviews that are topically relevant AND negative
             </p>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -1261,7 +1355,7 @@ export default function Intelligence() {
                 maxCount={maxCount}
                 totalReviews={report.total_reviews}
                 index={i}
-                onViewReviews={(indices, matchReasons) => setReviewModal({ indices, matchReasons })}
+                onViewReviews={(indices, matchReasons) => setReviewModal({ indices, matchReasons, bizId: businessId! })}
               />
             ))}
           </div>
@@ -1274,7 +1368,7 @@ export default function Intelligence() {
                   maxCount={maxCount}
                   totalReviews={report.total_reviews}
                   index={i + 3}
-                  onViewReviews={(indices, matchReasons) => setReviewModal({ indices, matchReasons })}
+                  onViewReviews={(indices, matchReasons) => setReviewModal({ indices, matchReasons, bizId: businessId! })}
                 />
               ))}
             </div>
@@ -1290,12 +1384,12 @@ export default function Intelligence() {
 
       {/* S3: When Did This Start? Timeline */}
       {report.problems.length > 0 && (
-        <TimelineSection problems={report.problems} weekBuckets={report.week_buckets} />
+        <TimelineSection problems={report.problems} weekBuckets={weekBuckets} />
       )}
 
       {/* S4: Trend Chart */}
       {report.problems.length > 0 && (
-        <TrendChart problems={report.problems} weekBuckets={report.week_buckets} />
+        <TrendChart problems={report.problems} weekBuckets={weekBuckets} />
       )}
 
       {/* S5: Competitive Intelligence */}
@@ -1318,11 +1412,26 @@ export default function Intelligence() {
         problems={report.problems}
       />
 
+      {/* Download CTA at bottom */}
+      <div className="card p-5 flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-gray-200">Download this report</p>
+          <p className="text-xs text-gray-500 mt-0.5">Save a text copy of this intelligence briefing</p>
+        </div>
+        <button
+          onClick={() => downloadPDF(report, businessName)}
+          className="btn-primary text-xs px-4 py-2 shrink-0 flex items-center gap-1.5"
+        >
+          ⬇ Download Report
+        </button>
+      </div>
+
       {/* Review Modal */}
       {reviewModal && (
         <ReviewModal
           indices={reviewModal.indices}
           matchReasons={reviewModal.matchReasons}
+          bizId={reviewModal.bizId}
           onClose={() => setReviewModal(null)}
         />
       )}
