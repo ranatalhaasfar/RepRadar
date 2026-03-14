@@ -95,7 +95,7 @@ function ProblemHeader({ problems, totalReviews, generatedAt }: {
   totalReviews: number
   generatedAt: string
 }) {
-  const criticalCount = problems.filter(p => p.mention_count > totalReviews * 0.1).length
+  const criticalCount = (problems ?? []).filter(p => p.mention_count > totalReviews * 0.1).length
 
   if (criticalCount === 0) {
     return (
@@ -200,9 +200,9 @@ function ProblemCard({ problem, maxCount, totalReviews, index, onViewReviews }: 
       </div>
 
       {/* Snippets */}
-      {problem.snippets.length > 0 && (
+      {(problem.snippets ?? []).length > 0 && (
         <div className="space-y-1.5">
-          {problem.snippets.slice(0, 2).map((s, i) => (
+          {(problem.snippets ?? []).slice(0, 2).map((s, i) => (
             <blockquote key={i} className="text-xs text-gray-400 italic border-l-2 border-[#1e2d4a] pl-3 leading-relaxed">
               "{s}…"
             </blockquote>
@@ -211,9 +211,9 @@ function ProblemCard({ problem, maxCount, totalReviews, index, onViewReviews }: 
       )}
 
       {/* CTA */}
-      {problem.review_indices.length > 0 && (
+      {(problem.review_indices ?? []).length > 0 && (
         <button
-          onClick={() => onViewReviews(problem.review_indices)}
+          onClick={() => onViewReviews(problem.review_indices ?? [])}
           className="text-xs text-purple-400 hover:text-purple-300 transition-colors self-start flex items-center gap-1 mt-auto"
         >
           View {problem.review_indices.length} related reviews →
@@ -255,7 +255,7 @@ function TrendChart({ problems, weekBuckets }: { problems: Problem[]; weekBucket
   const colors = ['#ef4444', '#f97316', '#eab308', '#8b5cf6', '#06b6d4']
   const top3 = problems.slice(0, 3)
 
-  const maxVal = Math.max(1, ...top3.flatMap(p => p.weekly_volume))
+  const maxVal = Math.max(1, ...top3.flatMap(p => Array.isArray(p.weekly_volume) ? p.weekly_volume : []))
   const chartH = 120
   const chartW = 500
   const padL = 24
@@ -265,7 +265,7 @@ function TrendChart({ problems, weekBuckets }: { problems: Problem[]; weekBucket
   const innerW = chartW - padL - padR
   const innerH = chartH - padT - padB
 
-  const xScale = (i: number) => padL + (i / (weekBuckets.length - 1)) * innerW
+  const xScale = (i: number) => padL + (weekBuckets.length > 1 ? (i / (weekBuckets.length - 1)) : 0) * innerW
   const yScale = (v: number) => padT + innerH - (v / maxVal) * innerH
 
   return (
@@ -318,7 +318,7 @@ function TrendChart({ problems, weekBuckets }: { problems: Problem[]; weekBucket
 
           {/* Lines */}
           {top3.map((p, pi) => {
-            const pts = p.weekly_volume
+            const pts = (p.weekly_volume ?? [])
               .map((v, i) => `${xScale(i)},${yScale(v)}`)
               .join(' ')
             return (
@@ -439,7 +439,7 @@ function CompetitorRadar({ competitors }: { competitors: CompetitorAnalysis[] })
             </div>
 
             <div className="pl-9 space-y-2">
-              {comp.weaknesses.map(w => (
+              {(comp.weaknesses ?? []).map(w => (
                 <div key={w.problem_name} className="flex items-start justify-between gap-3 py-2 border-b border-[#1a2540] last:border-0">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -614,8 +614,9 @@ function HealthScore({ score, potentialScore, problems, totalReviews }: {
   const color = score >= 75 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444'
   const label = score >= 75 ? 'Excellent' : score >= 50 ? 'Good' : 'Needs Work'
 
-  const lifters  = problems.filter(p => p.trend === 'improving').slice(0, 2)
-  const draggers = problems.filter(p => p.trend !== 'improving' && p.mention_count > totalReviews * 0.08).slice(0, 3)
+  const safeProblems = Array.isArray(problems) ? problems : []
+  const lifters  = safeProblems.filter(p => p.trend === 'improving').slice(0, 2)
+  const draggers = safeProblems.filter(p => p.trend !== 'improving' && p.mention_count > totalReviews * 0.08).slice(0, 3)
 
   return (
     <div className="card p-6 space-y-6">
@@ -658,7 +659,7 @@ function HealthScore({ score, potentialScore, problems, totalReviews }: {
 
         {potentialScore > score && (
           <p className="text-xs text-purple-400">
-            ✦ Fix your top {Math.min(3, problems.length)} issues → score reaches <span className="font-bold">{potentialScore}/100</span>
+            ✦ Fix your top {Math.min(3, safeProblems.length)} issues → score reaches <span className="font-bold">{potentialScore}/100</span>
           </p>
         )}
       </div>
@@ -813,7 +814,18 @@ export default function Intelligence() {
         throw new Error(body.error ?? `API error ${res.status}`)
       }
 
-      const data: IntelReport = await res.json()
+      const raw = await res.json()
+      // Normalize: ensure all array fields exist to prevent .map() crashes
+      const data: IntelReport = {
+        ...raw,
+        problems:            Array.isArray(raw.problems)            ? raw.problems            : [],
+        competitor_analysis: Array.isArray(raw.competitor_analysis) ? raw.competitor_analysis : [],
+        week_buckets:        Array.isArray(raw.week_buckets)        ? raw.week_buckets        : [],
+        weekly_brief: raw.weekly_brief ? {
+          ...raw.weekly_brief,
+          action_items: Array.isArray(raw.weekly_brief.action_items) ? raw.weekly_brief.action_items : [],
+        } : { week_label: '', weekly_stats: { this_week_count: 0, last_week_count: 0, this_week_rating: null, last_week_rating: null }, narrative: '', top_priority: '', biggest_win: '', action_items: [] },
+      }
       setReport(data)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to generate intelligence report')
