@@ -18,7 +18,6 @@ export default async function handler(req, res) {
 
   const {
     place_id,
-    limit: rawLimit = REVIEWS_FETCH_LIMIT,
     sort = 'newest',
     competitor = false,  // When true: single 50-review fetch
   } = req.body;
@@ -48,33 +47,15 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── Main business mode: two batches of 100 ──────────────────────────────
-  const limit = Math.min(Number(rawLimit) || REVIEWS_FETCH_LIMIT, REVIEWS_FETCH_LIMIT);
-  console.log(`[outscraper-reviews] place_id=${place_id} requested limit=${limit} sort=${sort}`);
-  console.log('[outscraper-reviews] OUTSCRAPER CALL ABOUT TO BE MADE — place_id:', place_id);
+  // ── Main business mode: single call, up to 200 reviews ──────────────────
+  // Outscraper supports up to 500 per request; billing is per review extracted,
+  // not per API call — so one call of 200 costs the same as two calls of 100.
+  console.log(`[outscraper-reviews] MAIN BUSINESS mode — place_id=${place_id} limit=${REVIEWS_FETCH_LIMIT} sort=${sort}`);
 
   try {
-    // ── Batch 1: reviews 1–100 (skip=0) ─────────────────────────────────────
-    console.log('[outscraper-reviews] ── Batch 1 (skip=0, limit=100) ──');
-    const batch1 = await runJob(place_id, 100, 0, sort, apiKey);
-    console.log(`[outscraper-reviews] Batch 1 reviews: ${batch1.length}`);
-
-    // ── Batch 2: reviews 101–200 (skip=100) ──────────────────────────────────
-    console.log('[outscraper-reviews] ── Batch 2 (skip=100, limit=100) ──');
-    const batch2 = await runJob(place_id, 100, 100, sort, apiKey);
-    console.log(`[outscraper-reviews] Batch 2 reviews: ${batch2.length}`);
-
-    // ── Merge + deduplicate ───────────────────────────────────────────────────
-    const seen = new Set();
-    const allReviews = [...batch1, ...batch2].filter(r => {
-      const key = `${r.reviewer_name ?? ''}||${r.review_text ?? ''}||${r.reviewed_at ?? ''}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    console.log(`[outscraper-reviews] Batch 1: ${batch1.length}, Batch 2: ${batch2.length}, Total merged: ${allReviews.length}`);
-    return res.json({ reviews: allReviews });
+    const reviews = await runJob(place_id, REVIEWS_FETCH_LIMIT, 0, sort, apiKey);
+    console.log(`[outscraper-reviews] fetched: ${reviews.length} reviews`);
+    return res.json({ reviews });
 
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
