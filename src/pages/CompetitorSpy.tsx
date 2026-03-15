@@ -404,7 +404,7 @@ export default function CompetitorSpy() {
           const revRes = await fetch('/api/outscraper-reviews', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ place_id: searchData.place_id, limit: 50, sort: 'newest' }),
+            body:    JSON.stringify({ place_id: searchData.place_id, competitor: true }),
           })
           if (revRes.ok) {
             const revData = await revRes.json()

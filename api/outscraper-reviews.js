@@ -1,4 +1,4 @@
-import { extractReviews, getSupabase } from './_lib/shared.js';
+import { extractReviews } from './_lib/shared.js';
 
 // Two sequential batches of 100 (skip=0, skip=100) → up to 200 reviews total.
 // Each job polls up to 10 × 12 s = 120 s. Combined max: ~240 s.
@@ -20,9 +20,7 @@ export default async function handler(req, res) {
     place_id,
     limit: rawLimit = REVIEWS_FETCH_LIMIT,
     sort = 'newest',
-    competitor = false,      // When true: single 50-review fetch, delete existing first
-    business_id = null,      // Required when competitor=true for DB cleanup
-    competitor_id = null,    // Required when competitor=true for DB cleanup
+    competitor = false,  // When true: single 50-review fetch
   } = req.body;
 
   if (!place_id) return res.status(400).json({ error: 'place_id is required.' });
@@ -36,27 +34,11 @@ export default async function handler(req, res) {
   const apiKey = process.env.OUTSCRAPER_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'OUTSCRAPER_API_KEY is not set.' });
 
-  // ── Competitor mode: single 50-review fetch ──────────────────────────────
+  // ── Competitor mode: single batch, 50 reviews only ───────────────────────
   if (competitor) {
-    const limit = COMPETITOR_REVIEWS_LIMIT;
-    console.log(`[outscraper-reviews] COMPETITOR mode — place_id=${place_id} limit=${limit}`);
-
-    // Delete existing competitor reviews before re-fetching
-    if (business_id && competitor_id) {
-      const supabase = getSupabase();
-      if (supabase) {
-        const { error: delErr } = await supabase
-          .from('reviews')
-          .delete()
-          .eq('business_id', competitor_id);
-        if (delErr) console.error('[outscraper-reviews] delete competitor reviews error:', delErr.message);
-        else console.log(`[outscraper-reviews] deleted existing reviews for competitor ${competitor_id}`);
-      }
-    }
-
+    console.log(`[outscraper-reviews] COMPETITOR mode — place_id=${place_id} limit=${COMPETITOR_REVIEWS_LIMIT}`);
     try {
-      console.log('[outscraper-reviews] OUTSCRAPER CALL — competitor single batch');
-      const reviews = await runJob(place_id, limit, 0, 'date_desc', apiKey);
+      const reviews = await runJob(place_id, COMPETITOR_REVIEWS_LIMIT, 0, 'newest', apiKey);
       console.log(`[outscraper-reviews] Competitor reviews fetched: ${reviews.length}`);
       return res.json({ reviews });
     } catch (error) {
