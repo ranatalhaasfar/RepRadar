@@ -120,8 +120,27 @@ export default function AIInsights() {
       return
     }
 
-    // ─── Layer 2: Supabase (source of truth — cross-device) ───
-    setLoading(true)
+    // ─── Layer 2: localStorage (instant, no network — show immediately) ───
+    const rawCached = localStorage.getItem(localKey)
+    if (rawCached) {
+      try {
+        const parsed = JSON.parse(rawCached) as { data: Insight[]; savedAt: number }
+        if (Array.isArray(parsed?.data) && parsed.data.length > 0) {
+          setInsights(parsed.data, bizId)
+          setCacheSource('localStorage')
+          // Silently back-fill Zustand; don't return yet — fall through to Supabase
+          // validation happens in background without blocking the UI
+        }
+      } catch {
+        localStorage.removeItem(localKey)
+      }
+    }
+
+    // ─── Layer 3: Supabase (source of truth — cross-device, runs in background) ───
+    // Only show spinner if we have nothing to display yet
+    if (insightsBusinessId !== bizId || !Array.isArray(insights) || insights.length === 0) {
+      setLoading(true)
+    }
     try {
       const { data: cached, error: cacheErr } = await supabase
         .from('insights')
@@ -144,25 +163,14 @@ export default function AIInsights() {
           impact:         row.impact as Impact,
         }))
         setInsights(loaded, bizId)
-        // Back-fill localStorage for offline/instant access
         localStorage.setItem(localKey, JSON.stringify({ data: loaded, savedAt: Date.now() }))
         setCacheSource('supabase')
         return
       }
 
-      // ─── Layer 3: localStorage fallback (if Supabase is empty, e.g. row was deleted) ───
-      const rawCached = localStorage.getItem(localKey)
-      if (rawCached) {
-        try {
-          const parsed = JSON.parse(rawCached) as { data: Insight[]; savedAt: number }
-          if (Array.isArray(parsed?.data) && parsed.data.length > 0) {
-            setInsights(parsed.data, bizId)
-            setCacheSource('localStorage')
-            return
-          }
-        } catch {
-          localStorage.removeItem(localKey)
-        }
+      // Supabase is empty — if localStorage already populated the UI, keep it
+      if (insightsBusinessId === bizId && Array.isArray(insights) && insights.length > 0) {
+        return
       }
 
       // ─── All layers empty — show empty state ───
@@ -173,6 +181,8 @@ export default function AIInsights() {
       setNoReviews((count ?? 0) === 0)
       setCacheSource(null)
     } catch (e: unknown) {
+      // If localStorage already loaded data, don't show the error
+      if (insightsBusinessId === bizId && Array.isArray(insights) && insights.length > 0) return
       setError(e instanceof Error ? e.message : 'Failed to load insights')
     } finally {
       setLoading(false)
