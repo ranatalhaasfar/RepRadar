@@ -795,12 +795,14 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Fetch success banner */}
+      {/* Fetch result banner */}
       {fetchedCount !== null && !fetchError && (
-        <div className="card p-3 border-emerald-500/30 flex items-center justify-between gap-3">
-          <span className="text-emerald-400 text-xs">
-            ✓ Fetched <strong>{fetchedCount}</strong> reviews from Outscraper
-            {fetchedCount < 200 && <span className="text-gray-500"> — Outscraper returned fewer than 200 (their cap for this business)</span>}
+        <div className={`card p-3 flex items-center justify-between gap-3 ${fetchedCount === 0 ? 'border-red-500/30' : 'border-emerald-500/30'}`}>
+          <span className={`text-xs ${fetchedCount === 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+            {fetchedCount === 0
+              ? '⚠ Outscraper returned 0 reviews — the fetch failed or this business has no reviews yet'
+              : <>✓ Fetched <strong>{fetchedCount}</strong> reviews from Outscraper{fetchedCount < 200 && <span className="text-gray-500"> (Outscraper cap for this business)</span>}</>
+            }
           </span>
           <button onClick={() => setFetchedCount(null)} className="text-xs text-gray-500 hover:text-gray-400">✕</button>
         </div>

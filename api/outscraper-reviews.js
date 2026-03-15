@@ -47,21 +47,21 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── Main business mode: two parallel jobs of 100 (skip=0, skip=100) ─────
-  // Outscraper's reviews-v3 hard-caps at 100 per job regardless of the limit
-  // parameter. Two parallel jobs fetch reviews 1-100 and 101-200 simultaneously,
-  // cutting wait time roughly in half vs sequential. Billing is per review
-  // extracted so cost is identical to one 200-review call.
-  console.log(`[outscraper-reviews] MAIN BUSINESS mode — launching 2 parallel jobs for place_id=${place_id}`);
+  // ── Main business mode: two sequential batches of 100 ───────────────────
+  // Outscraper reviews-v3 hard-caps at 100 per job. We run skip=0 then skip=100
+  // sequentially. Parallel caused rate-limit / empty responses.
+  console.log(`[outscraper-reviews] MAIN BUSINESS mode — place_id=${place_id}`);
 
   try {
-    const [batch1, batch2] = await Promise.all([
-      runJob(place_id, 100, 0,   sort, apiKey),
-      runJob(place_id, 100, 100, sort, apiKey),
-    ]);
-    console.log(`[outscraper-reviews] batch1=${batch1.length} batch2=${batch2.length}`);
+    console.log('[outscraper-reviews] batch 1 (skip=0, limit=100)');
+    const batch1 = await runJob(place_id, 100, 0, sort, apiKey);
+    console.log(`[outscraper-reviews] batch1=${batch1.length}`);
 
-    // Deduplicate across batches (skip occasionally returns overlapping reviews)
+    console.log('[outscraper-reviews] batch 2 (skip=100, limit=100)');
+    const batch2 = await runJob(place_id, 100, 100, sort, apiKey);
+    console.log(`[outscraper-reviews] batch2=${batch2.length}`);
+
+    // Deduplicate
     const seen = new Set();
     const reviews = [...batch1, ...batch2].filter(r => {
       const key = `${r.reviewer_name ?? ''}||${r.review_text ?? ''}||${r.reviewed_at ?? ''}`;
