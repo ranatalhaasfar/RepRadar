@@ -227,9 +227,9 @@ export default function CompetitorSpy() {
       // Fetch DB review counts for each competitor
       const withCounts = await Promise.all(comps.map(async c => {
         const { count } = await supabase
-          .from('reviews')
+          .from('competitor_reviews')
           .select('id', { count: 'exact', head: true })
-          .eq('business_id', c.id)
+          .eq('competitor_id', c.id)
         return { ...c, fetched_count: count ?? 0 }
       }))
 
@@ -308,11 +308,11 @@ export default function CompetitorSpy() {
     }))
 
     try {
-      // Fetch competitor review texts from DB
+      // Fetch competitor review texts from competitor_reviews table
       const { data: compRevs } = await supabase
-        .from('reviews')
+        .from('competitor_reviews')
         .select('review_text')
-        .eq('business_id', comp.id)
+        .eq('competitor_id', comp.id)
         .limit(30)
       const competitorReviews = (compRevs ?? []).map(r => r.review_text)
 
@@ -445,18 +445,19 @@ export default function CompetitorSpy() {
           results.forEach((r, i) => { r.id = saved[i]?.id ?? '' })
         }
 
-        // Save competitor reviews to the reviews table under the competitor's UUID
-        // so generate-intelligence.js can query them for weakness analysis
+        // Save competitor reviews to competitor_reviews table (separate from reviews
+        // to avoid FK constraint — reviews.business_id → businesses.id would reject
+        // competitor UUIDs which don't exist in the businesses table)
         for (const r of results) {
           const reviewsToSave: FetchedReview[] = r._reviews ?? []
           if (!r.id || reviewsToSave.length === 0) continue
 
           setLoadingMsg(`Saving reviews for "${r.name}"…`)
-          // Delete old reviews for this competitor first
-          await supabase.from('reviews').delete().eq('business_id', r.id)
+          await supabase.from('competitor_reviews').delete().eq('competitor_id', r.id)
 
           const reviewRows = reviewsToSave.map((rev: FetchedReview) => ({
-            business_id:   r.id,
+            competitor_id: r.id,
+            business_id:   activeBusiness.id,
             review_text:   rev.review_text ?? '',
             rating:        rev.rating ?? null,
             reviewer_name: rev.reviewer_name ?? null,
@@ -464,11 +465,13 @@ export default function CompetitorSpy() {
             sentiment:     rev.rating != null ? (rev.rating >= 4 ? 'positive' : rev.rating <= 2 ? 'negative' : 'neutral') : null,
           }))
 
-          const { error: revInsertErr } = await supabase.from('reviews').insert(reviewRows)
+          const { error: revInsertErr } = await supabase.from('competitor_reviews').insert(reviewRows)
           if (revInsertErr) {
             console.error(`Failed to save reviews for ${r.name}:`, revInsertErr.message)
+            setError(`Could not save reviews for ${r.name}: ${revInsertErr.message}`)
           } else {
             console.log(`Saved ${reviewRows.length} reviews for competitor ${r.name} (id: ${r.id})`)
+            r.fetched_count = reviewRows.length
           }
         }
       }

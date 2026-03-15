@@ -111,16 +111,17 @@ export default async function handler(req, res) {
       .select('*', { count: 'exact', head: true })
       .eq('business_id', business_id);
 
-    // Fetch reviews for each competitor from the DB
+    // Fetch reviews for each competitor from competitor_reviews table
+    // (separate table — reviews table has FK to businesses, competitor UUIDs are not businesses)
     const competitorData = await Promise.all((competitors ?? []).map(async comp => {
       const { data: compReviews, count: compFetchedCount } = await supabase
-        .from('reviews')
+        .from('competitor_reviews')
         .select('review_text, rating, sentiment', { count: 'exact' })
-        .eq('business_id', comp.id)
+        .eq('competitor_id', comp.id)
         .order('reviewed_at', { ascending: false })
         .limit(50);
       const fetchedCount = compFetchedCount ?? compReviews?.length ?? 0;
-      console.log(`[intelligence] ${comp.name}: ${fetchedCount} fetched reviews in DB`);
+      console.log(`[intelligence] ${comp.name}: ${fetchedCount} fetched reviews in competitor_reviews`);
       return { ...comp, fetched_count: fetchedCount, compReviews: compReviews ?? [] };
     }));
 
