@@ -1,13 +1,12 @@
 import { extractReviews } from './_lib/shared.js';
 
-// Two sequential batches of 100 (skip=0, skip=100) → up to 200 reviews total.
-// Each job polls up to 10 × 12 s = 120 s. Combined max: ~240 s.
+// Single call with reviewsLimit=200 — Outscraper reviews-v3 uses reviewsLimit
+// (not limit) for the number of reviews. limit=1 means fetch 1 place.
 // vercel.json: "api/outscraper-reviews.js": { "maxDuration": 300 }
 
 const POLL_INTERVAL = 12000; // 12 s between polls
 const MAX_POLLS     = 10;   // 10 × 12 s = 120 s per job
 
-// Limits exposed to callers
 const REVIEWS_FETCH_LIMIT      = 200;
 const COMPETITOR_REVIEWS_LIMIT = 50;
 
@@ -26,19 +25,19 @@ export default async function handler(req, res) {
 
   // Guard: only valid Google Place IDs (always start with "ChIJ") reach Outscraper
   if (typeof place_id !== 'string' || !place_id.startsWith('ChIJ')) {
-    console.error('[outscraper-reviews] BLOCKED — invalid place_id, not calling Outscraper:', place_id);
+    console.error('[outscraper-reviews] BLOCKED — invalid place_id:', place_id);
     return res.status(400).json({ error: 'Invalid business ID — cannot fetch reviews.' });
   }
 
   const apiKey = process.env.OUTSCRAPER_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'OUTSCRAPER_API_KEY is not set.' });
 
-  // ── Competitor mode: single batch, 50 reviews only ───────────────────────
+  // ── Competitor mode: single call, 50 reviews ─────────────────────────────
   if (competitor) {
-    console.log(`[outscraper-reviews] COMPETITOR mode — place_id=${place_id} limit=${COMPETITOR_REVIEWS_LIMIT}`);
+    console.log(`[outscraper-reviews] COMPETITOR mode — reviewsLimit=${COMPETITOR_REVIEWS_LIMIT}`);
     try {
-      const reviews = await runJob(place_id, COMPETITOR_REVIEWS_LIMIT, 0, 'newest', apiKey);
-      console.log(`[outscraper-reviews] Competitor reviews fetched: ${reviews.length}`);
+      const reviews = await runJob(place_id, COMPETITOR_REVIEWS_LIMIT, 'newest', apiKey);
+      console.log(`[outscraper-reviews] reviewsLimit=${COMPETITOR_REVIEWS_LIMIT} — got ${reviews.length} reviews back`);
       return res.json({ reviews });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -47,31 +46,15 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── Main business mode: two sequential batches of 100 ───────────────────
-  // Outscraper reviews-v3 hard-caps at 100 per job. We run skip=0 then skip=100
-  // sequentially. Parallel caused rate-limit / empty responses.
-  console.log(`[outscraper-reviews] MAIN BUSINESS mode — place_id=${place_id}`);
+  // ── Main business mode: single call, reviewsLimit=200 ────────────────────
+  // FIX: was using limit= (controls number of places, default 1) instead of
+  // reviewsLimit= (controls number of reviews). This is why we were capped at 100.
+  console.log(`[outscraper-reviews] MAIN BUSINESS mode — reviewsLimit=${REVIEWS_FETCH_LIMIT}`);
 
   try {
-    console.log('[outscraper-reviews] batch 1 (skip=0, limit=100)');
-    const batch1 = await runJob(place_id, 100, 0, sort, apiKey);
-    console.log(`[outscraper-reviews] batch1=${batch1.length}`);
-
-    console.log('[outscraper-reviews] batch 2 (skip=100, limit=100)');
-    const batch2 = await runJob(place_id, 100, 100, sort, apiKey);
-    console.log(`[outscraper-reviews] batch2=${batch2.length}`);
-
-    // Deduplicate
-    const seen = new Set();
-    const reviews = [...batch1, ...batch2].filter(r => {
-      const key = `${r.reviewer_name ?? ''}||${r.review_text ?? ''}||${r.reviewed_at ?? ''}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    console.log(`[outscraper-reviews] total after dedup: ${reviews.length}`);
-    return res.json({ reviews, meta: { batch1: batch1.length, batch2: batch2.length, total: reviews.length } });
+    const reviews = await runJob(place_id, REVIEWS_FETCH_LIMIT, sort, apiKey);
+    console.log(`[outscraper-reviews] reviewsLimit=${REVIEWS_FETCH_LIMIT} — got ${reviews.length} reviews back`);
+    return res.json({ reviews, meta: { total: reviews.length } });
 
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -82,12 +65,14 @@ export default async function handler(req, res) {
 
 /**
  * Submit one Outscraper async job and poll until Success. Returns extracted reviews.
+ * reviewsLimit = number of reviews to fetch (correct param name for reviews-v3)
+ * limit=1      = number of places to query (we always query exactly 1 place)
  */
-async function runJob(place_id, limit, skip, sort, apiKey) {
+async function runJob(place_id, reviewsLimit, sort, apiKey) {
   const query = encodeURIComponent(place_id);
   const url =
     `https://api.app.outscraper.com/maps/reviews-v3` +
-    `?query=${query}&limit=${limit}&skip=${skip}&sort=${sort}&async=true`;
+    `?query=${query}&reviewsLimit=${reviewsLimit}&limit=1&sort=${sort}&async=true`;
   console.log(`[outscraper-reviews] submitting: ${url}`);
 
   const submitResp = await fetch(url, { headers: { 'X-API-KEY': apiKey } });
@@ -105,7 +90,7 @@ async function runJob(place_id, limit, skip, sort, apiKey) {
   // Synchronous result — occasionally returned immediately
   if (submitData?.status === 'Success' && Array.isArray(submitData.data)) {
     console.log('[outscraper-reviews] sync result received immediately');
-    return extractAndLog(submitData.data, limit, skip);
+    return extractAndLog(submitData.data, reviewsLimit);
   }
 
   // Async polling
@@ -139,22 +124,21 @@ async function runJob(place_id, limit, skip, sort, apiKey) {
     console.log(`[outscraper-reviews] poll ${attempt}/${MAX_POLLS} status=${pollData?.status}`);
 
     if (pollData?.status === 'Success' && Array.isArray(pollData.data)) {
-      return extractAndLog(pollData.data, limit, skip);
+      return extractAndLog(pollData.data, reviewsLimit);
     }
   }
 
   throw new Error(
-    `Outscraper job (skip=${skip}) did not complete after ${MAX_POLLS} polls (${MAX_POLLS * POLL_INTERVAL / 1000}s). ` +
-    `Please try again.`
+    `Outscraper job did not complete after ${MAX_POLLS} polls (${MAX_POLLS * POLL_INTERVAL / 1000}s). Please try again.`
   );
 }
 
 /**
  * Log raw response structure, extract reviews, and return them.
  */
-function extractAndLog(dataArray, limit, skip) {
+function extractAndLog(dataArray, reviewsLimit) {
   const flat = dataArray.flat().filter(item => item !== null && typeof item === 'object');
-  console.log(`[outscraper-reviews] (skip=${skip}) raw: ${dataArray.length} top-level, ${flat.length} after flat()+filter`);
+  console.log(`[outscraper-reviews] raw: ${dataArray.length} top-level, ${flat.length} after flat()+filter`);
 
   flat.forEach((item, i) => {
     if (Array.isArray(item?.reviews)) {
@@ -172,11 +156,11 @@ function extractAndLog(dataArray, limit, skip) {
   });
 
   if (flat[0]) {
-    console.log(`[outscraper-reviews] (skip=${skip}) first-item keys: ${Object.keys(flat[0]).join(', ')}`);
-    console.log(`[outscraper-reviews] (skip=${skip}) FULL RAW flat[0]: ${JSON.stringify(flat[0]).slice(0, 1500)}`);
+    console.log(`[outscraper-reviews] first-item keys: ${Object.keys(flat[0]).join(', ')}`);
+    console.log(`[outscraper-reviews] FULL RAW flat[0]: ${JSON.stringify(flat[0]).slice(0, 1500)}`);
   }
 
   const reviews = extractReviews(dataArray);
-  console.log(`[outscraper-reviews] (skip=${skip}) requested=${limit}, Outscraper returned ${flat.length} items, extracted=${reviews.length} reviews`);
+  console.log(`[outscraper-reviews] reviewsLimit=${reviewsLimit}, extracted=${reviews.length} reviews`);
   return reviews;
 }
