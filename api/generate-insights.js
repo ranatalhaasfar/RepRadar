@@ -35,10 +35,10 @@ export default async function handler(req, res) {
         : { review_text: r.review_text ?? '', rating: r.rating ?? null }
     );
 
-    // Balanced sample: prioritise negative reviews, include neutral and positive
-    const negative = normalised.filter(r => r.rating !== null && r.rating <= 2).slice(0, 30);
-    const neutral  = normalised.filter(r => r.rating === 3).slice(0, 20);
-    const positive = normalised.filter(r => r.rating !== null && r.rating >= 4).slice(0, 30);
+    // Balanced sample: more positives so AI can surface wins alongside problems
+    const negative = normalised.filter(r => r.rating !== null && r.rating <= 2).slice(0, 25);
+    const neutral  = normalised.filter(r => r.rating === 3).slice(0, 15);
+    const positive = normalised.filter(r => r.rating !== null && r.rating >= 4).slice(0, 40);
     let balanced = [...negative, ...neutral, ...positive];
 
     // Fallback: if rating data is missing/null for all reviews, use all reviews as-is
@@ -59,21 +59,24 @@ export default async function handler(req, res) {
       messages: [{
         role: 'user',
         content:
-          `You are analyzing ${balanced.length} customer reviews for "${businessName}", a ${businessType}.\n` +
-          `Each review is prefixed with its star rating.\n` +
-          `Generate 4 to 6 specific, evidence-based insights. Each insight must:\n` +
-          `- Reference actual patterns seen across multiple reviews (not generic advice)\n` +
-          `- Mention approximately how many reviews mention this issue\n` +
-          `- Give a recommendation specific to this business type, not generic platitudes\n\n` +
+          `Generate 6-8 insights for "${businessName}", a ${businessType}. Analyzing ${balanced.length} customer reviews (each prefixed with star rating).\n\n` +
+          `MUST include a balanced mix:\n` +
+          `- At least 2-3 "Winning" insights: things customers love, repeatedly praise, or mention by name\n` +
+          `- At least 2-3 problem insights: recurring complaints with clear fix\n` +
+          `- At least 1 "Opportunity" insight: something underrated that could be promoted or improved\n\n` +
+          `For WINNING insights, QUANTIFY them specifically:\n` +
+          `- "X% of reviewers mention [specific item/aspect] positively"\n` +
+          `- "[Specific dish/feature] appears in N reviews — your most talked-about strength"\n` +
+          `- "Staff praise appears in N reviews — a key differentiator worth promoting"\n\n` +
           `Return a JSON object with this exact shape:\n` +
           `{\n` +
           `  "insights": [\n` +
           `    {\n` +
-          `      "icon": "<single relevant emoji>",\n` +
-          `      "category": "<one of: Service|Food|Pricing|Ambiance|Trending|Opportunity>",\n` +
-          `      "title": "<concise insight headline citing the specific issue, 60 chars max>",\n` +
-          `      "description": "<2 sentences citing the pattern found and how many reviews mention it>",\n` +
-          `      "recommendation": "<specific actionable advice tailored to this business type, 2-3 sentences>",\n` +
+          `      "icon": "<🏆 for winning, 🚀 for opportunity, ⚠️ for problems — or other relevant emoji>",\n` +
+          `      "category": "<one of: Winning|Service|Food|Pricing|Ambiance|Opportunity>",\n` +
+          `      "title": "<concise headline citing the specific pattern, 60 chars max>",\n` +
+          `      "description": "<2 sentences: the pattern found and exact count/percentage of reviews>",\n` +
+          `      "recommendation": "<specific actionable advice for this business type, 2-3 sentences>",\n` +
           `      "impact": "<High|Medium|Low>"\n` +
           `    }\n` +
           `  ]\n` +

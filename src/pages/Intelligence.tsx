@@ -71,9 +71,16 @@ type HealthBreakdown = {
   score_if_fixed_top3: number
 }
 
+type BiggestWin = {
+  title: string
+  detail: string
+  icon:  string
+}
+
 type IntelReport = {
   business_id:         string
   problems:            Problem[]
+  biggest_wins:        BiggestWin[]
   competitor_analysis: CompetitorAnalysis[]
   weekly_brief:        WeeklyBrief
   health_score:        number
@@ -263,6 +270,40 @@ function CrisisAlertBanner({ report }: { report: IntelReport }) {
         </div>
       </div>
       <p className="text-xs text-gray-600 relative z-10 shrink-0">Updated {relativeTime(generated_at)}</p>
+    </div>
+  )
+}
+
+// ── Section 1b: What's Working (Wins) ─────────────────────────────────────
+
+function WinsSection({ wins }: { wins: BiggestWin[] }) {
+  if (!Array.isArray(wins) || wins.length === 0) return null
+  return (
+    <div className="space-y-3">
+      <div>
+        <h2 className="text-base font-bold text-gray-100">What's Working</h2>
+        <p className="text-xs text-gray-500 mt-0.5">Strengths customers repeatedly praise — double down on these</p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {wins.map((win, i) => (
+          <div
+            key={i}
+            className="relative rounded-xl border border-emerald-500/25 border-l-4 border-l-emerald-500 bg-emerald-500/5 p-5 flex flex-col gap-3 transition-all duration-300 hover:border-emerald-500/40 hover:-translate-y-0.5"
+          >
+            <span className="text-5xl font-black leading-none select-none text-emerald-500/10 absolute top-3 right-4 pointer-events-none">
+              {win.icon}
+            </span>
+            <div className="relative z-10 flex items-center gap-2">
+              <span className="text-xl">{win.icon}</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                WINNING
+              </span>
+            </div>
+            <h3 className="text-sm font-bold text-gray-100 leading-snug relative z-10">{win.title}</h3>
+            <p className="text-xs text-emerald-300/80 leading-relaxed">{win.detail}</p>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -1123,6 +1164,7 @@ function normalizeReport(raw: Record<string, unknown>): IntelReport {
   return {
     business_id:         (raw.business_id as string) ?? '',
     problems:            Array.isArray(raw.problems)            ? raw.problems as Problem[]            : [],
+    biggest_wins:        Array.isArray(raw.biggest_wins)        ? raw.biggest_wins as BiggestWin[]     : [],
     competitor_analysis: Array.isArray(raw.competitor_analysis)
       ? (raw.competitor_analysis as Record<string, unknown>[]).map(c => ({
           id:             typeof c.id === 'string'             ? c.id             : String(c.id ?? ''),
@@ -1391,6 +1433,9 @@ export default function Intelligence() {
 
       {/* S1: Crisis / Health Alert Banner */}
       <CrisisAlertBanner report={report} />
+
+      {/* S1b: What's Working */}
+      <WinsSection wins={report.biggest_wins} />
 
       {/* S2: Problem Cards */}
       {report.problems.length > 0 ? (

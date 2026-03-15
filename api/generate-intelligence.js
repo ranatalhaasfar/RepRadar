@@ -54,6 +54,7 @@ export default async function handler(req, res) {
         const normalized = {
           ...cached,
           problems:            Array.isArray(cached.problems)            ? cached.problems            : [],
+          biggest_wins:        Array.isArray(cached.biggest_wins)        ? cached.biggest_wins        : [],
           competitor_analysis: Array.isArray(cached.competitor_analysis) ? cached.competitor_analysis : [],
           week_buckets:        Array.isArray(cached.week_buckets)        ? cached.week_buckets        : [],
           total_reviews:       cached.total_reviews   ?? 0,
@@ -180,6 +181,13 @@ export default async function handler(req, res) {
           `      "specific_action": "Specific actionable advice for this business, not generic platitudes"\n` +
           `    }\n` +
           `  ],\n` +
+          `  "biggest_wins": [\n` +
+          `    {\n` +
+          `      "title": "Your Most Mentioned Strength",\n` +
+          `      "detail": "e.g. Biryani is mentioned positively in 34 reviews — 67% of all reviews",\n` +
+          `      "icon": "🏆"\n` +
+          `    }\n` +
+          `  ],\n` +
           `  "weekly_narrative": "A full paragraph written like a business consultant delivering a frank assessment of what the reviews reveal this week. Include specific patterns, risks, and opportunities.",\n` +
           `  "top_priority": "Single most important action this week — be specific",\n` +
           `  "biggest_win": "One positive highlight from this week's reviews",\n` +
@@ -192,6 +200,7 @@ export default async function handler(req, res) {
           `- trend: must be exactly one of: "worsening", "improving", or "stable"\n` +
           `- trend_pct: estimated percentage change (0-50)\n` +
           `- specific_action: must be tailored to this business type and problem, not generic\n` +
+          `- biggest_wins: identify 2-3 things customers genuinely love, with specific mention counts and percentages. Name the actual dish, staff quality, or ambiance detail. Only include wins that appear in 3+ reviews.\n` +
           `- weekly_narrative: write like a consultant — frank, specific, actionable\n` +
           `\nReviews:\n${sample}`,
       }],
@@ -474,9 +483,12 @@ export default async function handler(req, res) {
     const generated_at = new Date().toISOString()
     const stale_after = new Date(new Date(generated_at).getTime() + 3 * 24 * 60 * 60 * 1000).toISOString()
 
+    const biggest_wins = Array.isArray(aiData.biggest_wins) ? aiData.biggest_wins : [];
+
     const report = {
       business_id,
       problems,
+      biggest_wins,
       competitor_analysis,
       weekly_brief: {
         week_label,
@@ -505,6 +517,7 @@ export default async function handler(req, res) {
       const { error: insertErr } = await supabase.from('intelligence_reports').insert({
         business_id,
         problems:             report.problems,
+        biggest_wins:         report.biggest_wins,
         competitor_analysis:  report.competitor_analysis,
         weekly_brief:         report.weekly_brief,
         health_score:         report.health_score,

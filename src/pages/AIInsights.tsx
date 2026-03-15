@@ -7,7 +7,7 @@ import type { Insight } from '../store/appStore'
 // ── Styles ──────────────────────────────────────────────────────────────────
 
 type Impact   = 'High' | 'Medium' | 'Low'
-type Category = 'Service' | 'Food' | 'Pricing' | 'Ambiance' | 'Trending' | 'Opportunity'
+type Category = 'Service' | 'Food' | 'Pricing' | 'Ambiance' | 'Trending' | 'Opportunity' | 'Winning'
 
 const IMPACT_STYLES: Record<Impact, string> = {
   High:   'bg-red-500/20 text-red-400 border border-red-500/30',
@@ -22,6 +22,7 @@ const CATEGORY_STYLES: Record<Category, string> = {
   Ambiance:    'bg-blue-500/15 text-blue-300',
   Trending:    'bg-pink-500/15 text-pink-300',
   Opportunity: 'bg-cyan-500/15 text-cyan-300',
+  Winning:     'bg-emerald-500/15 text-emerald-300',
 }
 
 // ── InsightCard ────────────────────────────────────────────────────────────
