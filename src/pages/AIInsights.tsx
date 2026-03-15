@@ -199,12 +199,12 @@ export default function AIInsights() {
     try {
       const { data: revData, error: revErr } = await supabase
         .from('reviews')
-        .select('review_text')
+        .select('review_text, rating')
         .eq('business_id', bizId)
       if (revErr) throw new Error(`Reviews load error: ${revErr.message}`)
 
-      const texts = (revData ?? []).map(r => r.review_text)
-      if (texts.length === 0) {
+      const reviews = revData ?? []
+      if (reviews.length === 0) {
         setNoReviews(true)
         clearInsights()
         localStorage.removeItem(`repradar_insights_${bizId}`)
@@ -222,9 +222,10 @@ export default function AIInsights() {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           business_id:  bizId,
+          user_id:      user.id,
           businessName: activeBusiness.name,
           businessType: activeBusiness.type,
-          reviews: texts,
+          reviews,
         }),
       })
       if (!res.ok) {

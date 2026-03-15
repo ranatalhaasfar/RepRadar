@@ -6,7 +6,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { businessName, businessType, reviews, business_id } = req.body;
+  const { businessName, businessType, reviews, business_id, user_id } = req.body;
   if (!Array.isArray(reviews) || reviews.length === 0) {
     return res.status(400).json({ error: 'reviews array is required.' });
   }
@@ -27,26 +27,41 @@ export default async function handler(req, res) {
         }
       }
     }
-    const sample = reviews.slice(0, 20).map(r => (r.review_text || r || '').substring(0, 150)).join('\n');
+
+    // Balanced sample: prioritise negative reviews, include neutral and positive
+    const negative = reviews.filter(r => r.rating <= 2).slice(0, 30);
+    const neutral  = reviews.filter(r => r.rating === 3).slice(0, 20);
+    const positive = reviews.filter(r => r.rating >= 4).slice(0, 30);
+    const balanced = [...negative, ...neutral, ...positive];
+
+    console.log(`[generate-insights] sample: ${negative.length} negative, ${neutral.length} neutral, ${positive.length} positive = ${balanced.length} total`);
+
+    const sample = balanced
+      .map(r => `[${r.rating ?? '?'}★] ${(r.review_text || r || '').substring(0, 120)}`)
+      .join('\n');
 
     const response = await getClient().messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
+      max_tokens: 3000,
       system: 'You are a business intelligence engine. Return only valid JSON — no markdown, no explanation, no code fences.',
       messages: [{
         role: 'user',
         content:
-          `You are analyzing customer reviews for "${businessName}", a ${businessType}.\n` +
-          `Generate 4 to 6 actionable business insights based on these reviews.\n\n` +
+          `You are analyzing ${balanced.length} customer reviews for "${businessName}", a ${businessType}.\n` +
+          `Each review is prefixed with its star rating.\n` +
+          `Generate 4 to 6 specific, evidence-based insights. Each insight must:\n` +
+          `- Reference actual patterns seen across multiple reviews (not generic advice)\n` +
+          `- Mention approximately how many reviews mention this issue\n` +
+          `- Give a recommendation specific to this business type, not generic platitudes\n\n` +
           `Return a JSON object with this exact shape:\n` +
           `{\n` +
           `  "insights": [\n` +
           `    {\n` +
           `      "icon": "<single relevant emoji>",\n` +
           `      "category": "<one of: Service|Food|Pricing|Ambiance|Trending|Opportunity>",\n` +
-          `      "title": "<concise insight headline, 60 chars max>",\n` +
-          `      "description": "<2 sentence explanation of the pattern found>",\n` +
-          `      "recommendation": "<specific actionable advice, 2-3 sentences>",\n` +
+          `      "title": "<concise insight headline citing the specific issue, 60 chars max>",\n` +
+          `      "description": "<2 sentences citing the pattern found and how many reviews mention it>",\n` +
+          `      "recommendation": "<specific actionable advice tailored to this business type, 2-3 sentences>",\n` +
           `      "impact": "<High|Medium|Low>"\n` +
           `    }\n` +
           `  ]\n` +
@@ -66,6 +81,7 @@ export default async function handler(req, res) {
           const now = new Date().toISOString();
           const rows = data.insights.map(ins => ({
             business_id,
+            user_id: user_id ?? null,
             icon: ins.icon, category: ins.category, title: ins.title,
             description: ins.description, recommendation: ins.recommendation,
             impact: ins.impact, created_at: now,
