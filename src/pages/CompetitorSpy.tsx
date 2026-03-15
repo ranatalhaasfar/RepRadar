@@ -9,6 +9,13 @@ import { useAppStore } from '../store/appStore'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+type FetchedReview = {
+  review_text:   string
+  rating:        number | null
+  reviewer_name: string | null
+  reviewed_at:   string | null
+}
+
 type CompetitorEntry = {
   id:            string
   name:          string
@@ -19,6 +26,7 @@ type CompetitorEntry = {
   total_reviews: number | null
   reviews_fetched_at: string | null
   fetched_count?: number  // Actual count in our DB
+  _reviews?: FetchedReview[]  // Temp: holds raw reviews before DB save
 }
 
 type CompetitorInsights = {
@@ -370,23 +378,18 @@ export default function CompetitorSpy() {
         }
 
         // 2. Fetch 50 most-recent reviews for this competitor
-        let fetchedCount = 0
+        let fetchedReviews: { review_text: string; rating: number | null; reviewer_name: string | null; reviewed_at: string | null }[] = []
         if (typeof searchData.place_id === 'string' && searchData.place_id.startsWith('ChIJ')) {
           setLoadingMsg(`Fetching reviews for "${searchData.name}"… (may take 1–2 min)`)
           console.log('OUTSCRAPER CALL — competitor place_id:', searchData.place_id)
           const revRes = await fetch('/api/outscraper-reviews', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({
-              place_id:      searchData.place_id,
-              competitor:    true,
-              business_id:   activeBusiness?.id,
-              competitor_id: searchData.place_id, // temp; replaced after DB save
-            }),
+            body:    JSON.stringify({ place_id: searchData.place_id, limit: 50, sort: 'newest' }),
           })
           if (revRes.ok) {
             const revData = await revRes.json()
-            fetchedCount = (revData.reviews ?? []).length
+            fetchedReviews = revData.reviews ?? []
           }
         } else {
           console.error('BLOCKED competitor review fetch — invalid place_id:', searchData.place_id)
@@ -399,11 +402,12 @@ export default function CompetitorSpy() {
           google_rating: searchData.rating,
           total_reviews: searchData.reviews_count,
           reviews_fetched_at: new Date().toISOString(),
-          fetched_count: fetchedCount,
+          fetched_count: fetchedReviews.length,
+          _reviews: fetchedReviews,
         })
       }
 
-      // 3. Save competitors to DB
+      // 3. Save competitors to DB, then save their reviews under the real UUID
       if (activeBusiness) {
         setLoadingMsg('Saving competitor data…')
         await supabase.from('competitors').delete().eq('business_id', activeBusiness.id)
@@ -420,6 +424,33 @@ export default function CompetitorSpy() {
         const { data: saved } = await supabase.from('competitors').insert(rows).select()
         if (saved) {
           results.forEach((r, i) => { r.id = saved[i]?.id ?? '' })
+        }
+
+        // Save competitor reviews to the reviews table under the competitor's UUID
+        // so generate-intelligence.js can query them for weakness analysis
+        for (const r of results) {
+          const reviewsToSave: FetchedReview[] = r._reviews ?? []
+          if (!r.id || reviewsToSave.length === 0) continue
+
+          setLoadingMsg(`Saving reviews for "${r.name}"…`)
+          // Delete old reviews for this competitor first
+          await supabase.from('reviews').delete().eq('business_id', r.id)
+
+          const reviewRows = reviewsToSave.map((rev: FetchedReview) => ({
+            business_id:   r.id,
+            review_text:   rev.review_text ?? '',
+            rating:        rev.rating ?? null,
+            reviewer_name: rev.reviewer_name ?? null,
+            reviewed_at:   rev.reviewed_at ?? null,
+            sentiment:     rev.rating != null ? (rev.rating >= 4 ? 'positive' : rev.rating <= 2 ? 'negative' : 'neutral') : null,
+          }))
+
+          const { error: revInsertErr } = await supabase.from('reviews').insert(reviewRows)
+          if (revInsertErr) {
+            console.error(`Failed to save reviews for ${r.name}:`, revInsertErr.message)
+          } else {
+            console.log(`Saved ${reviewRows.length} reviews for competitor ${r.name} (id: ${r.id})`)
+          }
         }
       }
 
