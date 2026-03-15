@@ -543,7 +543,8 @@ export default function Dashboard() {
       return
     }
 
-    if (!isStale(business.reviews_fetched_at, 7)) {
+    const isAdmin = user.email === 'pajamapoems00@gmail.com'
+    if (!isAdmin && !isStale(business.reviews_fetched_at, 7)) {
       setFetchError('Reviews were fetched less than 7 days ago. Please wait before refreshing again.')
       return
     }
