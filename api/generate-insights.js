@@ -7,13 +7,30 @@ export default async function handler(req, res) {
   }
 
   const { businessName, businessType, reviews, business_id, user_id } = req.body;
-  if (!Array.isArray(reviews) || reviews.length === 0) {
-    return res.status(400).json({ error: 'reviews array is required.' });
-  }
 
   try {
+    // Use passed reviews, or fall back to fetching from DB if empty
+    let reviewData = Array.isArray(reviews) && reviews.length > 0 ? reviews : [];
+    if (reviewData.length === 0 && business_id) {
+      const supabase = getSupabase();
+      if (supabase) {
+        const { data: dbReviews } = await supabase
+          .from('reviews')
+          .select('review_text, rating')
+          .eq('business_id', business_id)
+          .order('reviewed_at', { ascending: false })
+          .limit(200);
+        reviewData = dbReviews ?? [];
+        console.log(`[generate-insights] fetched ${reviewData.length} reviews from DB (none passed by client)`);
+      }
+    }
+
+    if (reviewData.length === 0) {
+      return res.status(422).json({ error: 'No reviews found for this business' });
+    }
+
     // Normalise: accept both string[] (legacy) and {review_text, rating}[] (current)
-    const normalised = reviews.map(r =>
+    const normalised = reviewData.map(r =>
       typeof r === 'string'
         ? { review_text: r, rating: null }
         : { review_text: r.review_text ?? '', rating: r.rating ?? null }
@@ -25,7 +42,7 @@ export default async function handler(req, res) {
     const positive = normalised.filter(r => r.rating !== null && r.rating >= 4).slice(0, 35);
     let balanced = [...negative, ...neutral, ...positive];
 
-    // Fallback: if rating data is missing/null for all reviews, use all reviews as-is
+    // Fallback: if all ratings are null, use all reviews
     if (balanced.length === 0) {
       balanced = normalised.slice(0, 80);
     }
@@ -33,7 +50,10 @@ export default async function handler(req, res) {
     console.log(`[generate-insights] sample: ${negative.length} negative, ${neutral.length} neutral, ${positive.length} positive = ${balanced.length} total (from ${normalised.length} reviews)`);
 
     const sample = balanced
-      .map(r => `[${r.rating ?? '?'}★] ${r.review_text.substring(0, 120)}`)
+      .map(r => {
+        const text = typeof r.review_text === 'string' ? r.review_text : '';
+        return `[${r.rating ?? '?'}★] ${text.substring(0, 120)}`;
+      })
       .join('\n');
 
     const response = await getClient().messages.create({

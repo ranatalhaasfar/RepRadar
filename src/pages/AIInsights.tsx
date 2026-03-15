@@ -234,8 +234,14 @@ export default function AIInsights() {
         throw new Error(errData.error ?? 'Failed to generate insights')
       }
       const data = await res.json()
+      console.log('[AIInsights] API response:', data)
+
+      if (!data.insights || data.insights.length === 0) {
+        throw new Error(data.error ?? 'No insights returned — the AI may have received too few reviews')
+      }
+
       // API now saves to Supabase itself — just update local layers
-      const rawInsights: Omit<Insight, 'id'>[] = data.insights ?? []
+      const rawInsights: Omit<Insight, 'id'>[] = data.insights
       const fresh = rawInsights.map((ins, i) => ({ ...ins, id: i }))
 
       localStorage.setItem(`repradar_insights_${bizId}`, JSON.stringify({ data: fresh, savedAt: Date.now() }))
