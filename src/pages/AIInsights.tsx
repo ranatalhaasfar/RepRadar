@@ -90,7 +90,7 @@ export default function AIInsights() {
   const {
     activeBusiness,
     insights, insightsLoadedAt, insightsBusinessId,
-    setInsights, clearInsights,
+    setInsights, clearInsights, setShowUpgradeModal,
   } = useAppStore()
 
   // ── Local UI state ──
@@ -231,6 +231,7 @@ export default function AIInsights() {
       })
       if (!res.ok) {
         const errData = await res.json().catch(() => ({ error: res.statusText }))
+        if (errData.error === 'upgrade_required') { setShowUpgradeModal(true); return }
         throw new Error(errData.error ?? 'Failed to generate insights')
       }
       const data = await res.json()

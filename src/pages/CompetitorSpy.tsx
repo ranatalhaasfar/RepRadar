@@ -185,7 +185,8 @@ function InsightSection({
 
 export default function CompetitorSpy() {
   const { user } = useAuth()
-  const activeBusiness = useAppStore(s => s.activeBusiness)
+  const activeBusiness      = useAppStore(s => s.activeBusiness)
+  const setShowUpgradeModal = useAppStore(s => s.setShowUpgradeModal)
   const [myReviewTexts, setMyReviewTexts] = useState<string[]>([])
 
   // Inputs: name + city pairs
@@ -330,11 +331,13 @@ export default function CompetitorSpy() {
           competitorReviews,
           myReviews:         myReviewTexts.slice(0, 15),
           refresh,
+          user_id:           user?.id,
         }),
       })
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: res.statusText }))
+        if (err.error === 'upgrade_required') { setShowUpgradeModal(true); return }
         throw new Error(err.error ?? 'Failed to generate insights')
       }
 
@@ -404,11 +407,14 @@ export default function CompetitorSpy() {
           const revRes = await fetch('/api/outscraper-reviews', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ place_id: searchData.place_id, competitor: true }),
+            body:    JSON.stringify({ place_id: searchData.place_id, competitor: true, user_id: user?.id }),
           })
           if (revRes.ok) {
             const revData = await revRes.json()
             fetchedReviews = revData.reviews ?? []
+          } else {
+            const revErr = await revRes.json().catch(() => ({}))
+            if (revErr.error === 'upgrade_required') { setShowUpgradeModal(true); return }
           }
         } else {
           console.error('BLOCKED competitor review fetch — invalid place_id:', searchData.place_id)

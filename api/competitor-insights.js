@@ -1,4 +1,4 @@
-import { getClient, getSupabase } from './_lib/shared.js';
+import { getClient, getSupabase, checkPlanAccess } from './_lib/shared.js';
 import { extractJSONObject } from './utils/extractJSON.js';
 
 export default async function handler(req, res) {
@@ -17,6 +17,7 @@ export default async function handler(req, res) {
     competitorReviews = [],
     myReviews = [],
     refresh = false,
+    user_id,
   } = req.body;
 
   if (!business_id || !competitor_id) {
@@ -24,6 +25,9 @@ export default async function handler(req, res) {
   }
 
   const supabase = getSupabase();
+
+  const { isPaid } = await checkPlanAccess(supabase, user_id);
+  if (!isPaid) return res.status(403).json({ error: 'upgrade_required', message: 'This feature requires a paid plan.' });
 
   // Cache hit — return existing insights unless refresh=true
   if (!refresh && supabase) {

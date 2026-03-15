@@ -1,4 +1,4 @@
-import { getClient, getSupabase } from './_lib/shared.js';
+import { getClient, getSupabase, checkPlanAccess } from './_lib/shared.js';
 import { extractJSONObject } from './utils/extractJSON.js';
 
 function sanitizeText(text) {
@@ -25,12 +25,15 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { business_id, business_name, business_type, force_refresh } = req.body;
+  const { business_id, business_name, business_type, force_refresh, user_id } = req.body;
   if (!business_id) {
     return res.status(400).json({ error: 'business_id is required.' });
   }
 
   const supabase = getSupabase();
+
+  const { isPaid } = await checkPlanAccess(supabase, user_id);
+  if (!isPaid) return res.status(403).json({ error: 'upgrade_required', message: 'This feature requires a paid plan.' });
 
   // ── Cache check (7-day TTL) ────────────────────────────────────────────────
   if (!force_refresh && supabase) {

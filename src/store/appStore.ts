@@ -61,6 +61,9 @@ type AppStore = {
   pendingReviewText:  string | null  // pre-fill ReviewResponder
   pendingNavPage:     string | null  // navigate to this page after mount
 
+  // ── UI modals ──
+  showUpgradeModal:   boolean
+
   // ── Actions ──
   setActiveBusiness:    (business: Business) => void
   setAllBusinesses:     (businesses: Business[]) => void
@@ -72,6 +75,7 @@ type AppStore = {
   clearCategories:      () => void
   setPendingReviewText: (text: string | null) => void
   setPendingNavPage:    (page: string | null) => void
+  setShowUpgradeModal:  (show: boolean) => void
   clearAll:             () => void
 }
 
@@ -98,6 +102,8 @@ export const useAppStore = create<AppStore>((set) => ({
 
   pendingReviewText:   null,
   pendingNavPage:      null,
+
+  showUpgradeModal:    false,
 
   // ── Actions ──
   setActiveBusiness: (business) => set({ activeBusinessId: business.id, activeBusiness: business }),
@@ -145,6 +151,8 @@ export const useAppStore = create<AppStore>((set) => ({
   setPendingReviewText: (text) => set({ pendingReviewText: text }),
 
   setPendingNavPage: (page) => set({ pendingNavPage: page }),
+
+  setShowUpgradeModal: (show) => set({ showUpgradeModal: show }),
 
   clearAll: () => set({
     activeBusinessId:      null,

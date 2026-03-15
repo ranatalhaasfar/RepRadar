@@ -1,4 +1,4 @@
-import { getClient, getSupabase } from './_lib/shared.js';
+import { getClient, getSupabase, checkPlanAccess } from './_lib/shared.js';
 import { extractJSON } from './utils/extractJSON.js';
 
 export default async function handler(req, res) {
@@ -6,10 +6,13 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { reviews, business_id } = req.body;
+  const { reviews, business_id, user_id } = req.body;
   if (!Array.isArray(reviews) || reviews.length === 0) {
     return res.status(400).json({ error: 'reviews array is required.' });
   }
+
+  const { isPaid } = await checkPlanAccess(getSupabase(), user_id);
+  if (!isPaid) return res.status(403).json({ error: 'upgrade_required', message: 'This feature requires a paid plan.' });
 
   try {
     // Hard cache check — return existing Supabase categories if available

@@ -27,6 +27,32 @@ export function getSupabase() {
   return _supabase;
 }
 
+// ── Plan access helpers ────────────────────────────────────────────────────
+
+const ADMIN_EMAIL = 'pajamapoems00@gmail.com';
+
+export function isAdminEmail(email) {
+  return email === ADMIN_EMAIL;
+}
+
+export async function checkPlanAccess(supabase, userId) {
+  if (!supabase || !userId) return { isAdmin: false, isPaid: false, plan: 'free', email: null };
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('plan, email')
+    .eq('id', userId)
+    .single();
+  const email = profile?.email ?? null;
+  const plan  = profile?.plan  ?? 'free';
+  const admin = isAdminEmail(email);
+  return {
+    isAdmin: admin,
+    isPaid:  admin || plan === 'starter' || plan === 'pro' || plan === 'agency',
+    plan,
+    email,
+  };
+}
+
 // ── Tone descriptions ──────────────────────────────────────────────────────
 
 export const TONE_DESCRIPTIONS = {

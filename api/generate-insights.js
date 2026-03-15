@@ -1,4 +1,4 @@
-import { getClient, getSupabase } from './_lib/shared.js';
+import { getClient, getSupabase, checkPlanAccess } from './_lib/shared.js';
 import { extractJSONObject } from './utils/extractJSON.js';
 
 export default async function handler(req, res) {
@@ -7,6 +7,9 @@ export default async function handler(req, res) {
   }
 
   const { businessName, businessType, reviews, business_id, user_id } = req.body;
+
+  const { isPaid } = await checkPlanAccess(getSupabase(), user_id);
+  if (!isPaid) return res.status(403).json({ error: 'upgrade_required', message: 'This feature requires a paid plan.' });
 
   try {
     // Use passed reviews, or fall back to fetching from DB if empty

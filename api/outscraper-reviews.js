@@ -1,4 +1,4 @@
-import { extractReviews } from './_lib/shared.js';
+import { extractReviews, getSupabase, checkPlanAccess } from './_lib/shared.js';
 
 // Single call with reviewsLimit=200 — Outscraper reviews-v3 uses reviewsLimit
 // (not limit) for the number of reviews. limit=1 means fetch 1 place.
@@ -19,9 +19,13 @@ export default async function handler(req, res) {
     place_id,
     sort = 'newest',
     competitor = false,  // When true: single 50-review fetch
+    user_id,
   } = req.body;
 
   if (!place_id) return res.status(400).json({ error: 'place_id is required.' });
+
+  const { isPaid } = await checkPlanAccess(getSupabase(), user_id);
+  if (!isPaid) return res.status(403).json({ error: 'upgrade_required', message: 'This feature requires a paid plan.' });
 
   // Guard: only valid Google Place IDs (always start with "ChIJ") reach Outscraper
   if (typeof place_id !== 'string' || !place_id.startsWith('ChIJ')) {

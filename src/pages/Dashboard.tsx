@@ -263,7 +263,7 @@ export default function Dashboard() {
     activeBusiness, activeBusinessId,
     business, reviews, dashboardLoadedAt, dashboardBusinessId, setDashboard,
     categories, categoriesLoadedAt, categoriesBusinessId, setCategories,
-    setPendingReviewText, setPendingNavPage,
+    setPendingReviewText, setPendingNavPage, setShowUpgradeModal,
   } = useAppStore()
 
   // ── Local UI state (not persisted — fine to reset on reload) ──
@@ -555,10 +555,11 @@ export default function Dashboard() {
       const res = await fetch('/api/outscraper-reviews', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ place_id: business.place_id, limit: MAX_REFRESH_FETCH, sort: 'newest' }),
+        body:    JSON.stringify({ place_id: business.place_id, limit: MAX_REFRESH_FETCH, sort: 'newest', user_id: user?.id }),
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
+        if (d.error === 'upgrade_required') { setShowUpgradeModal(true); return }
         throw new Error(d.error ?? 'Failed to fetch reviews')
       }
       const { reviews: fetched, meta } = await res.json()
@@ -643,10 +644,13 @@ export default function Dashboard() {
       const res = await fetch('/api/generate-categories', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ reviews }),
+        body:    JSON.stringify({ reviews, user_id: user?.id }),
       })
       const payload = await res.json()
-      if (!res.ok) throw new Error(payload.error ?? `API error ${res.status}`)
+      if (!res.ok) {
+        if (payload.error === 'upgrade_required') { setShowUpgradeModal(true); return }
+        throw new Error(payload.error ?? `API error ${res.status}`)
+      }
 
       const newCats: Category[] = payload.categories
       // Clear old localStorage before saving fresh

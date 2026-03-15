@@ -307,15 +307,16 @@ function AuthenticatedApp() {
   const clearAll          = useAppStore(s => s.clearAll)
   const setActiveBusiness = useAppStore(s => s.setActiveBusiness)
   const setAllBusinesses  = useAppStore(s => s.setAllBusinesses)
-  const activeBusiness    = useAppStore(s => s.activeBusiness)
-  const allBusinesses     = useAppStore(s => s.allBusinesses)
-  const pendingNavPage    = useAppStore(s => s.pendingNavPage)
-  const setPendingNavPage = useAppStore(s => s.setPendingNavPage)
+  const activeBusiness      = useAppStore(s => s.activeBusiness)
+  const allBusinesses       = useAppStore(s => s.allBusinesses)
+  const pendingNavPage      = useAppStore(s => s.pendingNavPage)
+  const setPendingNavPage   = useAppStore(s => s.setPendingNavPage)
+  const showUpgradeModal    = useAppStore(s => s.showUpgradeModal)
+  const setShowUpgradeModal = useAppStore(s => s.setShowUpgradeModal)
 
   const [page, setPage]               = useState<Page>('dashboard')
   const [hasOnboarded, setHasOnboarded] = useState<boolean | null>(null)
   const [addingBusiness, setAddingBusiness]   = useState(false)
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [sidebarOpen, setSidebarOpen]   = useState(false)
   const [bizToDelete, setBizToDelete]   = useState<Business | null>(null)
   const [deleting, setDeleting]         = useState(false)
@@ -532,19 +533,34 @@ function AuthenticatedApp() {
 
       {/* ── Upgrade modal ── */}
       {showUpgradeModal && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0f1629] border border-[#1e2d4a] rounded-2xl p-8 max-w-sm w-full text-center space-y-4">
-            <p className="text-3xl">🚀</p>
-            <h2 className="text-lg font-bold text-gray-100">Upgrade to Pro</h2>
-            <p className="text-sm text-gray-400">
-              The free plan supports 1 business. Upgrade to Pro for up to 3 businesses, or Agency for up to 10.
+        <div className="fixed inset-0 bg-black/70 z-[9999] flex items-center justify-center p-4">
+          <div className="bg-[#0f1123] border border-[#2a2d4a] rounded-2xl p-8 max-w-sm w-full text-center space-y-4">
+            <p className="text-5xl">🔒</p>
+            <h2 className="text-xl font-bold text-gray-100">Upgrade to Unlock</h2>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              This feature requires a paid plan. Get access to AI insights, review fetching, competitor analysis, and more.
             </p>
-            <p className="text-xs text-gray-600">Paid plans coming soon.</p>
+            <div className="space-y-3 text-left">
+              <div className="bg-[#1a1d33] border border-purple-500/40 rounded-xl p-4">
+                <p className="font-semibold text-gray-100 text-sm">Starter — $29/month</p>
+                <p className="text-xs text-gray-500 mt-1">1 business · All features</p>
+              </div>
+              <div className="bg-[#1a1d33] border border-[#2a2d4a] rounded-xl p-4">
+                <p className="font-semibold text-gray-100 text-sm">Pro — $49/month</p>
+                <p className="text-xs text-gray-500 mt-1">3 businesses · Priority support</p>
+              </div>
+            </div>
+            <button
+              onClick={() => window.open('mailto:pajamapoems00@gmail.com?subject=RepRadar Upgrade Request', '_blank')}
+              className="btn-primary w-full px-6 py-3 text-sm font-semibold"
+            >
+              Get Started →
+            </button>
             <button
               onClick={() => setShowUpgradeModal(false)}
-              className="btn-primary w-full px-6 py-3 text-sm"
+              className="text-sm text-gray-600 hover:text-gray-400 transition-colors block w-full"
             >
-              Got it
+              Maybe later
             </button>
           </div>
         </div>

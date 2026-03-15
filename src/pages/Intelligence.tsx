@@ -1211,8 +1211,8 @@ function downloadPDF(_report: IntelReport, _businessName: string) {
 // ── Main Component ─────────────────────────────────────────────────────────
 
 export default function Intelligence() {
-  useAuth() // ensure auth context is active
-  const { activeBusiness, setPendingNavPage }           = useAppStore()
+  const { user } = useAuth()
+  const { activeBusiness, setPendingNavPage, setShowUpgradeModal } = useAppStore()
   const businessId   = activeBusiness?.id ?? null
   const businessName = activeBusiness?.name ?? ''
 
@@ -1299,11 +1299,13 @@ export default function Intelligence() {
           business_name: activeBusiness.name,
           business_type: activeBusiness.type,
           force_refresh: true,
+          user_id:       user?.id,
         }),
       })
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: res.statusText }))
+        if (body.error === 'upgrade_required') { setShowUpgradeModal(true); return }
         if (body.error === 'insufficient_reviews') {
           setError(`insufficient_reviews:${body.count ?? 0}`)
           return
