@@ -37,14 +37,14 @@ export default async function handler(req, res) {
     );
 
     // Representative sample: negatives for problem detection, positives to surface wins
-    const negative = normalised.filter(r => r.rating !== null && r.rating <= 2).slice(0, 30);
-    const neutral  = normalised.filter(r => r.rating === 3).slice(0, 15);
-    const positive = normalised.filter(r => r.rating !== null && r.rating >= 4).slice(0, 35);
+    const negative = normalised.filter(r => r.rating !== null && r.rating <= 2).slice(0, 15);
+    const neutral  = normalised.filter(r => r.rating === 3).slice(0, 10);
+    const positive = normalised.filter(r => r.rating !== null && r.rating >= 4).slice(0, 20);
     let balanced = [...negative, ...neutral, ...positive];
 
     // Fallback: if all ratings are null, use all reviews
     if (balanced.length === 0) {
-      balanced = normalised.slice(0, 80);
+      balanced = normalised.slice(0, 40);
     }
 
     console.log(`[generate-insights] sample: ${negative.length} negative, ${neutral.length} neutral, ${positive.length} positive = ${balanced.length} total (from ${normalised.length} reviews)`);
@@ -57,8 +57,8 @@ export default async function handler(req, res) {
       .join('\n');
 
     const response = await getClient().messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 3000,
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2000,
       system: 'You are a business intelligence engine. Return only valid JSON — no markdown, no explanation, no code fences.',
       messages: [{
         role: 'user',
