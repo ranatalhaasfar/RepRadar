@@ -28,16 +28,28 @@ export default async function handler(req, res) {
       }
     }
 
-    // Balanced sample: prioritise negative reviews, include neutral and positive
-    const negative = reviews.filter(r => r.rating <= 2).slice(0, 30);
-    const neutral  = reviews.filter(r => r.rating === 3).slice(0, 20);
-    const positive = reviews.filter(r => r.rating >= 4).slice(0, 30);
-    const balanced = [...negative, ...neutral, ...positive];
+    // Normalise: accept both string[] (legacy) and {review_text, rating}[] (current)
+    const normalised = reviews.map(r =>
+      typeof r === 'string'
+        ? { review_text: r, rating: null }
+        : { review_text: r.review_text ?? '', rating: r.rating ?? null }
+    );
 
-    console.log(`[generate-insights] sample: ${negative.length} negative, ${neutral.length} neutral, ${positive.length} positive = ${balanced.length} total`);
+    // Balanced sample: prioritise negative reviews, include neutral and positive
+    const negative = normalised.filter(r => r.rating !== null && r.rating <= 2).slice(0, 30);
+    const neutral  = normalised.filter(r => r.rating === 3).slice(0, 20);
+    const positive = normalised.filter(r => r.rating !== null && r.rating >= 4).slice(0, 30);
+    let balanced = [...negative, ...neutral, ...positive];
+
+    // Fallback: if rating data is missing/null for all reviews, use all reviews as-is
+    if (balanced.length === 0) {
+      balanced = normalised.slice(0, 80);
+    }
+
+    console.log(`[generate-insights] sample: ${negative.length} negative, ${neutral.length} neutral, ${positive.length} positive = ${balanced.length} total (from ${normalised.length} reviews)`);
 
     const sample = balanced
-      .map(r => `[${r.rating ?? '?'}★] ${(r.review_text || r || '').substring(0, 120)}`)
+      .map(r => `[${r.rating ?? '?'}★] ${r.review_text.substring(0, 120)}`)
       .join('\n');
 
     const response = await getClient().messages.create({
