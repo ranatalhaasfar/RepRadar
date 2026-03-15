@@ -111,14 +111,17 @@ export default async function handler(req, res) {
       .select('*', { count: 'exact', head: true })
       .eq('business_id', business_id);
 
-    // Count fetched reviews for each competitor (stored under their own ID if imported)
+    // Fetch reviews for each competitor from the DB
     const competitorData = await Promise.all((competitors ?? []).map(async comp => {
-      const { count: compFetchedCount } = await supabase
+      const { data: compReviews, count: compFetchedCount } = await supabase
         .from('reviews')
-        .select('*', { count: 'exact', head: true })
-        .eq('business_id', comp.id);
-      console.log(`[intelligence] ${comp.name}: ${compFetchedCount ?? 0} fetched reviews in DB`);
-      return { ...comp, fetched_count: compFetchedCount ?? 0 };
+        .select('review_text, rating, sentiment', { count: 'exact' })
+        .eq('business_id', comp.id)
+        .order('reviewed_at', { ascending: false })
+        .limit(50);
+      const fetchedCount = compFetchedCount ?? compReviews?.length ?? 0;
+      console.log(`[intelligence] ${comp.name}: ${fetchedCount} fetched reviews in DB`);
+      return { ...comp, fetched_count: fetchedCount, compReviews: compReviews ?? [] };
     }));
 
     // ── Build weekly buckets (last 8 weeks) ───────────────────────────────
@@ -311,10 +314,13 @@ export default async function handler(req, res) {
     const myReviewCount = myFetchedCount ?? reviews.length;
 
     const competitor_analysis = competitorData.map(comp => {
-      const compRating    = comp.google_rating ?? null;
-      const compCount     = comp.fetched_count; // reviews actually in DB, not Google total
-      const ratingGap     = compRating != null ? Math.round((myAvgRating - compRating) * 10) / 10 : null;
+      const compRating     = comp.google_rating ?? null;
+      const compCount      = comp.fetched_count;
+      const compReviews    = comp.compReviews ?? [];
+      const ratingGap      = compRating != null ? Math.round((myAvgRating - compRating) * 10) / 10 : null;
       const hasCompReviews = compCount > 0;
+
+      console.log(`[intelligence] competitor_analysis for ${comp.name}: ${compCount} reviews, hasCompReviews=${hasCompReviews}`);
 
       // ── They Beat Us: only real, numbered facts ──
       const they_do_better = [];
@@ -330,14 +336,44 @@ export default async function handler(req, res) {
         );
       }
 
-      // ── Their Complaints: only if we have their review data ──
+      // ── Their Weaknesses: derived from actual competitor reviews in DB ──
       const no_reviews = !hasCompReviews;
-      const weaknesses = hasCompReviews
-        ? problems
-            .filter(p => p.mention_count >= 3)
-            .slice(0, 4)
-            .map(p => `"${p.name}" — ${p.mention_count} mentions in analysed reviews`)
-        : [];
+      let weaknesses = [];
+
+      if (hasCompReviews && compReviews.length > 0) {
+        // Find recurring negative themes in competitor reviews
+        const negativeCompReviews = compReviews
+          .filter(r => r.rating <= 3 && r.review_text)
+          .map(r => r.review_text.toLowerCase());
+
+        console.log(`[intelligence] ${comp.name}: ${negativeCompReviews.length} negative reviews to analyse`);
+
+        // Use our own problem keywords to find matches in competitor reviews
+        weaknesses = problems
+          .filter(p => p.mention_count >= 2)
+          .map(p => {
+            const keywords = p.keywords ?? [];
+            const matchCount = negativeCompReviews.filter(text =>
+              keywords.some(kw => text.includes(kw))
+            ).length;
+            return { name: p.name, matchCount };
+          })
+          .filter(w => w.matchCount >= 1)
+          .sort((a, b) => b.matchCount - a.matchCount)
+          .slice(0, 4)
+          .map(w => `"${w.name}" — ${w.matchCount} mention${w.matchCount > 1 ? 's' : ''} in their reviews`);
+
+        // If keyword matching found nothing, extract raw negative snippets
+        if (weaknesses.length === 0) {
+          const snippets = compReviews
+            .filter(r => r.rating <= 2 && r.review_text && r.review_text.trim().length > 20)
+            .slice(0, 3)
+            .map(r => `"${r.review_text.substring(0, 80).trim()}…"`);
+          if (snippets.length > 0) {
+            weaknesses = [`${snippets.length} low-rated reviews: ${snippets[0]}`];
+          }
+        }
+      }
 
       // ── Our Opportunity: only include if we actually have the advantage ──
       const opportunities = [];
