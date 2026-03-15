@@ -273,6 +273,7 @@ export default function Dashboard() {
   const [error,           setError]           = useState('')
   const [fetchingReviews, setFetchingReviews] = useState(false)
   const [fetchError,      setFetchError]      = useState('')
+  const [fetchedCount,    setFetchedCount]    = useState<number | null>(null)
   const [fromCache,       setFromCache]       = useState(false)
   const [keywords,        setKeywords]        = useState<string[]>([])
   const [timeline,        setTimeline]        = useState<SentimentPoint[]>([])
@@ -559,7 +560,9 @@ export default function Dashboard() {
         const d = await res.json().catch(() => ({}))
         throw new Error(d.error ?? 'Failed to fetch reviews')
       }
-      const { reviews: fetched } = await res.json()
+      const { reviews: fetched, meta } = await res.json()
+      console.log(`[Dashboard] Outscraper returned ${fetched.length} reviews`, meta)
+      setFetchedCount(fetched.length)
 
       if (fetched.length > 0) {
         await supabase.from('reviews').delete().eq('business_id', business.id)
@@ -788,6 +791,17 @@ export default function Dashboard() {
           <button onClick={fetchNewReviews} className="text-xs text-amber-400 underline hover:no-underline">
             Fetch now
           </button>
+        </div>
+      )}
+
+      {/* Fetch success banner */}
+      {fetchedCount !== null && !fetchError && (
+        <div className="card p-3 border-emerald-500/30 flex items-center justify-between gap-3">
+          <span className="text-emerald-400 text-xs">
+            ✓ Fetched <strong>{fetchedCount}</strong> reviews from Outscraper
+            {fetchedCount < 200 && <span className="text-gray-500"> — Outscraper returned fewer than 200 (their cap for this business)</span>}
+          </span>
+          <button onClick={() => setFetchedCount(null)} className="text-xs text-gray-500 hover:text-gray-400">✕</button>
         </div>
       )}
 

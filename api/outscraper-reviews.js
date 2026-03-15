@@ -47,15 +47,31 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── Main business mode: single call, up to 200 reviews ──────────────────
-  // Outscraper supports up to 500 per request; billing is per review extracted,
-  // not per API call — so one call of 200 costs the same as two calls of 100.
-  console.log(`[outscraper-reviews] MAIN BUSINESS mode — place_id=${place_id} limit=${REVIEWS_FETCH_LIMIT} sort=${sort}`);
+  // ── Main business mode: two parallel jobs of 100 (skip=0, skip=100) ─────
+  // Outscraper's reviews-v3 hard-caps at 100 per job regardless of the limit
+  // parameter. Two parallel jobs fetch reviews 1-100 and 101-200 simultaneously,
+  // cutting wait time roughly in half vs sequential. Billing is per review
+  // extracted so cost is identical to one 200-review call.
+  console.log(`[outscraper-reviews] MAIN BUSINESS mode — launching 2 parallel jobs for place_id=${place_id}`);
 
   try {
-    const reviews = await runJob(place_id, REVIEWS_FETCH_LIMIT, 0, sort, apiKey);
-    console.log(`[outscraper-reviews] fetched: ${reviews.length} reviews`);
-    return res.json({ reviews });
+    const [batch1, batch2] = await Promise.all([
+      runJob(place_id, 100, 0,   sort, apiKey),
+      runJob(place_id, 100, 100, sort, apiKey),
+    ]);
+    console.log(`[outscraper-reviews] batch1=${batch1.length} batch2=${batch2.length}`);
+
+    // Deduplicate across batches (skip occasionally returns overlapping reviews)
+    const seen = new Set();
+    const reviews = [...batch1, ...batch2].filter(r => {
+      const key = `${r.reviewer_name ?? ''}||${r.review_text ?? ''}||${r.reviewed_at ?? ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    console.log(`[outscraper-reviews] total after dedup: ${reviews.length}`);
+    return res.json({ reviews, meta: { batch1: batch1.length, batch2: batch2.length, total: reviews.length } });
 
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
