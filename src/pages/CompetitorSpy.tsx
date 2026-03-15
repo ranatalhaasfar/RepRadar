@@ -204,75 +204,94 @@ export default function CompetitorSpy() {
   // Per-competitor insight state: competitorId → InsightState
   const [insightStates, setInsightStates] = useState<Record<string, InsightState>>({})
 
-  // ── Load cached competitors and insights on business change ────────────────
+  // ── Load cached competitors and insights ─────────────────────────────────
+
+  const loadCachedData = async (biz: typeof activeBusiness) => {
+    if (!biz) return
+
+    // Load my reviews
+    const { data: revs } = await supabase
+      .from('reviews')
+      .select('review_text')
+      .eq('business_id', biz.id)
+    setMyReviewTexts((revs ?? []).map(r => r.review_text))
+
+    // Load cached competitors
+    const { data: comps } = await supabase
+      .from('competitors')
+      .select('*')
+      .eq('business_id', biz.id)
+      .order('created_at', { ascending: true })
+
+    if (comps && comps.length > 0) {
+      // Fetch DB review counts for each competitor
+      const withCounts = await Promise.all(comps.map(async c => {
+        const { count } = await supabase
+          .from('reviews')
+          .select('id', { count: 'exact', head: true })
+          .eq('business_id', c.id)
+        return { ...c, fetched_count: count ?? 0 }
+      }))
+
+      setCompetitors(withCounts)
+      setHasResults(true)
+      setInputs(
+        comps.slice(0, 3).map(c => ({ name: c.name, city: c.location ?? '' })).concat(
+          Array(Math.max(0, 3 - comps.length)).fill({ name: '', city: '' })
+        ).slice(0, 3)
+      )
+
+      // Load cached insights for each competitor
+      const ids = withCounts.filter(c => c.id).map(c => c.id)
+      const newStates: Record<string, InsightState> = {}
+      if (ids.length > 0) {
+        const { data: cachedInsights } = await supabase
+          .from('competitor_analysis')
+          .select('*')
+          .eq('business_id', biz.id)
+          .in('competitor_id', ids)
+        if (cachedInsights && cachedInsights.length > 0) {
+          cachedInsights.forEach(row => {
+            newStates[row.competitor_id] = {
+              data:         row.insights,
+              loading:      false,
+              error:        '',
+              generated_at: row.generated_at,
+              cached:       true,
+            }
+          })
+        }
+      }
+      setInsightStates(newStates)
+      // Return competitors with reviews but no cached insights — caller will auto-generate
+      return withCounts.filter(c => (c.fetched_count ?? 0) > 0 && !newStates[c.id])
+    } else {
+      setCompetitors([])
+      setHasResults(false)
+      setInputs([{ name: '', city: '' }, { name: '', city: '' }, { name: '', city: '' }])
+    }
+    return []
+  }
 
   useEffect(() => {
     if (!user || !activeBusiness) return
-    ;(async () => {
-      const biz = activeBusiness
-
-      // Load my reviews
-      const { data: revs } = await supabase
-        .from('reviews')
-        .select('review_text')
-        .eq('business_id', biz.id)
-      setMyReviewTexts((revs ?? []).map(r => r.review_text))
-
-      // Load cached competitors
-      const { data: comps } = await supabase
-        .from('competitors')
-        .select('*')
-        .eq('business_id', biz.id)
-        .order('created_at', { ascending: true })
-
-      if (comps && comps.length > 0) {
-        // Fetch DB review counts for each competitor
-        const withCounts = await Promise.all(comps.map(async c => {
-          const { count } = await supabase
-            .from('reviews')
-            .select('id', { count: 'exact', head: true })
-            .eq('business_id', c.id)
-          return { ...c, fetched_count: count ?? 0 }
-        }))
-
-        setCompetitors(withCounts)
-        setHasResults(true)
-        setInputs(
-          comps.slice(0, 3).map(c => ({ name: c.name, city: c.location ?? '' })).concat(
-            Array(Math.max(0, 3 - comps.length)).fill({ name: '', city: '' })
-          ).slice(0, 3)
-        )
-
-        // Load cached insights for each competitor
-        const ids = withCounts.filter(c => c.id).map(c => c.id)
-        if (ids.length > 0) {
-          const { data: cachedInsights } = await supabase
-            .from('competitor_analysis')
-            .select('*')
-            .eq('business_id', biz.id)
-            .in('competitor_id', ids)
-
-          if (cachedInsights && cachedInsights.length > 0) {
-            const newStates: Record<string, InsightState> = {}
-            cachedInsights.forEach(row => {
-              newStates[row.competitor_id] = {
-                data:         row.insights,
-                loading:      false,
-                error:        '',
-                generated_at: row.generated_at,
-                cached:       true,
-              }
-            })
-            setInsightStates(newStates)
-          }
-        }
-      } else {
-        setCompetitors([])
-        setHasResults(false)
-        setInputs([{ name: '', city: '' }, { name: '', city: '' }, { name: '', city: '' }])
-      }
-    })()
+    loadCachedData(activeBusiness).then(needsInsights => {
+      needsInsights?.forEach(comp => fetchInsights(comp, false))
+    })
   }, [user, activeBusiness?.id])
+
+  // ── Refresh button: reload counts + insights without re-fetching Outscraper ──
+
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  const handleRefreshData = async () => {
+    if (!activeBusiness) return
+    setIsRefreshing(true)
+    setInsightStates({})
+    const needsInsights = await loadCachedData(activeBusiness)
+    needsInsights?.forEach(comp => fetchInsights(comp, false))
+    setIsRefreshing(false)
+  }
 
   const updateInput = (i: number, field: 'name' | 'city', val: string) => {
     setInputs(prev => { const next = [...prev]; next[i] = { ...next[i], [field]: val }; return next })
@@ -551,6 +570,22 @@ export default function CompetitorSpy() {
       {/* Results */}
       {hasResults && competitors.length > 0 && (
         <>
+          {/* Results header with refresh */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-500">
+                {competitors.map(c => `${c.name}: ${c.fetched_count ?? 0} reviews in DB`).join(' · ')}
+              </p>
+            </div>
+            <button
+              onClick={handleRefreshData}
+              disabled={isRefreshing}
+              className="text-xs text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {isRefreshing ? <SpinnerIcon size={3} /> : '↻'} Refresh Data
+            </button>
+          </div>
+
           {/* Chart */}
           {chartData.length > 1 && (
             <div className="card p-4 sm:p-6">
