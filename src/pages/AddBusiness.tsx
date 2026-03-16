@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import type { Business } from '../lib/supabase'
+import { searchBusiness as outscraperSearch } from '../lib/useOutscraperSearch'
+import type { SearchResult } from '../lib/useOutscraperSearch'
 
 const BUSINESS_TYPES = ['Restaurant', 'Retail', 'Cafe', 'Salon', 'Bar', 'Other']
 
@@ -19,13 +21,6 @@ const STEPS = [
   { label: 'Confirm',       icon: '✅' },
 ]
 
-type SearchResult = {
-  place_id:      string
-  name:          string
-  full_address:  string | null
-  rating:        number | null
-  reviews_count: number | null
-}
 
 export default function AddBusiness({
   onComplete,
@@ -44,6 +39,7 @@ export default function AddBusiness({
 
   // Search state
   const [searching, setSearching]       = useState(false)
+  const [searchMsg, setSearchMsg]       = useState('Searching Google Maps…')
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null)
   const [searchError, setSearchError]   = useState('')
 
@@ -69,54 +65,20 @@ export default function AddBusiness({
   }
 
   // ── Step 3: search Google Maps via Outscraper ───────────────────────────
-  // Submit the job, then poll client-side to avoid Vercel 10s function limit.
 
   const searchBusiness = async () => {
     setSearching(true)
+    setSearchMsg('Searching Google Maps…')
     setSearchError('')
     setSearchResult(null)
     setStep(3)
     try {
-      // 1. Submit
-      const params = new URLSearchParams({ name: name.trim(), city: location.trim() })
-      const res = await fetch(`/api/outscraper-search?${params}`)
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
-        throw new Error(d.error ?? `Search failed (${res.status})`)
+      const result = await outscraperSearch(name, location, setSearchMsg)
+      if (!result) {
+        setSearchError(`We couldn't find "${name.trim()}" in ${location.trim()} on Google Maps. Please check the name and try again.`)
+      } else {
+        setSearchResult(result)
       }
-      const data = await res.json()
-
-      // 2. Sync result
-      if (data.ready) {
-        if (!data.found) {
-          setSearchError(`We couldn't find "${name.trim()}" in ${location.trim()} on Google Maps. Please check the name and try again.`)
-        } else {
-          setSearchResult(data)
-        }
-        return
-      }
-
-      // 3. Async — poll from client (up to 20 × 3s = 60s)
-      const { resultsUrl } = data
-      if (!resultsUrl) throw new Error('No results URL returned from search.')
-
-      for (let i = 0; i < 20; i++) {
-        await new Promise(r => setTimeout(r, 3000))
-        const pollParams = new URLSearchParams({ poll: '1', resultsUrl })
-        const pollRes = await fetch(`/api/outscraper-search?${pollParams}`)
-        if (!pollRes.ok) continue
-        const pollData = await pollRes.json()
-        if (pollData.ready) {
-          if (!pollData.found) {
-            setSearchError(`We couldn't find "${name.trim()}" in ${location.trim()} on Google Maps. Please check the name and try again.`)
-          } else {
-            setSearchResult(pollData)
-          }
-          return
-        }
-      }
-
-      throw new Error('Search timed out. Please try again.')
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Search failed'
       setSearchError(msg)
@@ -312,7 +274,7 @@ export default function AddBusiness({
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                <span className="text-sm text-black/40">Searching Google Maps…</span>
+                <span className="text-sm text-black/40">{searchMsg}</span>
               </div>
             )}
 

@@ -1,9 +1,13 @@
 // outscraper-search.js
-// Uses async=false to get a synchronous result from Outscraper in one call.
-// Falls back to client-side polling if Outscraper returns an async job anyway.
-// Two modes:
-//   GET ?name=...&city=...        → submit, return result or { ready:false, resultsUrl }
-//   GET ?poll=1&resultsUrl=...    → poll once, return { ready, ...place }
+//
+// Designed for Vercel Hobby (10s function limit).
+// Each invocation does at most 2 polls × 2s = ~6s total, well within 10s.
+// If the job isn't done, returns { pending: true, jobUrl } so the client
+// can call again with ?jobUrl=... to continue polling.
+//
+// Modes:
+//   GET ?name=...&city=...   → submit job, poll up to 2×, return result or pending
+//   GET ?jobUrl=...          → poll once, return result or pending
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -13,57 +17,61 @@ export default async function handler(req, res) {
   const apiKey = process.env.OUTSCRAPER_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'OUTSCRAPER_API_KEY is not set.' });
 
-  // ── Poll mode ─────────────────────────────────────────────────────────────
-  if (req.query.poll === '1') {
-    const { resultsUrl } = req.query;
-    if (!resultsUrl) return res.status(400).json({ error: 'resultsUrl is required' });
+  // ── jobUrl mode: poll once ────────────────────────────────────────────────
+  if (req.query.jobUrl) {
+    const jobUrl = String(req.query.jobUrl);
+    console.log(`[outscraper-search] polling jobUrl: ${jobUrl}`);
     try {
-      const pollResp = await fetch(String(resultsUrl), { headers: { 'X-API-KEY': apiKey } });
-      if (!pollResp.ok) return res.json({ ready: false });
-      const pollData = await pollResp.json().catch(() => null);
-      if (pollData?.status === 'Success' && Array.isArray(pollData.data)) {
-        return res.json(extractPlace(pollData.data));
-      }
-      return res.json({ ready: false });
-    } catch {
-      return res.json({ ready: false });
+      const result = await pollOnce(jobUrl, apiKey);
+      return res.json(result);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Poll failed';
+      console.error('[outscraper-search] poll error:', message);
+      return res.status(500).json({ error: message });
     }
   }
 
-  // ── Submit mode ───────────────────────────────────────────────────────────
+  // ── submit mode ───────────────────────────────────────────────────────────
   const { name, city } = req.query;
   if (!name) return res.status(400).json({ error: 'name is required.' });
 
   try {
     const query = encodeURIComponent(`${String(name)} ${String(city || '')}`.trim());
-    // async=false: Outscraper blocks until done (usually 2-8s, within 15s maxDuration)
-    const url = `https://api.app.outscraper.com/maps/search-v3?query=${query}&limit=1&async=false`;
-    console.log(`[outscraper-search] GET ${url}`);
+    const submitUrl = `https://api.app.outscraper.com/maps/search-v3?query=${query}&limit=1&async=true`;
+    console.log(`[outscraper-search] submitting: ${submitUrl}`);
 
-    const resp = await fetch(url, { headers: { 'X-API-KEY': apiKey } });
-    const text = await resp.text();
-    console.log(`[outscraper-search] status=${resp.status} body=${text.slice(0, 400)}`);
+    const submitResp = await fetch(submitUrl, { headers: { 'X-API-KEY': apiKey } });
+    const submitText = await submitResp.text();
+    console.log(`[outscraper-search] submit status=${submitResp.status} body=${submitText.slice(0, 300)}`);
 
-    if (!resp.ok) {
-      throw new Error(`Outscraper error (${resp.status}): ${text.slice(0, 300)}`);
+    if (!submitResp.ok) {
+      throw new Error(`Outscraper submit failed (${submitResp.status}): ${submitText.slice(0, 300)}`);
     }
 
-    let data;
-    try { data = JSON.parse(text); } catch { throw new Error(`Non-JSON response: ${text.slice(0, 200)}`); }
+    let submitData;
+    try { submitData = JSON.parse(submitText); }
+    catch { throw new Error(`Non-JSON response: ${submitText.slice(0, 200)}`); }
 
-    // Sync success
-    if (data?.status === 'Success' && Array.isArray(data.data)) {
-      return res.json(extractPlace(data.data));
+    // Occasionally returns synchronously
+    if (submitData?.status === 'Success' && Array.isArray(submitData.data)) {
+      console.log('[outscraper-search] sync result');
+      return res.json(extractPlace(submitData.data));
     }
 
-    // Outscraper returned an async job anyway — give client the polling URL
-    const resultsUrl = data?.results_location;
-    if (resultsUrl) {
-      console.log(`[outscraper-search] async fallback, polling url: ${resultsUrl}`);
-      return res.json({ ready: false, resultsUrl });
+    const jobUrl = submitData?.results_location;
+    if (!jobUrl) throw new Error(`No results_location in response: ${submitText.slice(0, 300)}`);
+
+    // Poll up to 2 times × 2s = 4s (leaves headroom within 10s limit)
+    for (let i = 1; i <= 2; i++) {
+      await sleep(2000);
+      const result = await pollOnce(jobUrl, apiKey);
+      console.log(`[outscraper-search] poll ${i}/2: ready=${!result.pending}`);
+      if (!result.pending) return res.json(result);
     }
 
-    throw new Error(`Unexpected Outscraper response: ${text.slice(0, 300)}`);
+    // Still not done — tell the client to keep polling
+    console.log(`[outscraper-search] not done after 2 polls, returning pending`);
+    return res.json({ pending: true, jobUrl });
 
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -72,11 +80,20 @@ export default async function handler(req, res) {
   }
 }
 
+async function pollOnce(jobUrl, apiKey) {
+  const resp = await fetch(jobUrl, { headers: { 'X-API-KEY': apiKey } });
+  if (!resp.ok) return { pending: true, jobUrl };
+  const data = await resp.json().catch(() => null);
+  if (data?.status === 'Success' && Array.isArray(data.data)) {
+    return extractPlace(data.data);
+  }
+  return { pending: true, jobUrl };
+}
+
 function extractPlace(dataArray) {
   const place = dataArray.flat()[0];
-  if (!place) return { ready: true, found: false };
+  if (!place) return { found: false };
   return {
-    ready:         true,
     found:         true,
     place_id:      place.place_id ?? place.google_id ?? null,
     name:          place.name ?? null,
@@ -84,4 +101,8 @@ function extractPlace(dataArray) {
     rating:        typeof place.rating === 'number' ? place.rating : null,
     reviews_count: typeof place.reviews === 'number' ? place.reviews : null,
   };
+}
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
 }
