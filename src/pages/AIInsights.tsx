@@ -16,7 +16,7 @@ const IMPACT_STYLES: Record<Impact, string> = {
 }
 
 const CATEGORY_STYLES: Record<Category, string> = {
-  Service:     'bg-purple-500/15 text-purple-300',
+  Service:     'bg-emerald-50 text-emerald-600',
   Food:        'bg-orange-500/15 text-orange-300',
   Pricing:     'bg-emerald-500/15 text-emerald-300',
   Ambiance:    'bg-blue-500/15 text-blue-300',
@@ -38,32 +38,32 @@ function InsightCard({ insight, expanded, onToggle }: {
         <span className="text-2xl">{insight.icon}</span>
         <div>
           <div className="flex items-center gap-2 flex-wrap mb-1">
-            <span className={`badge text-xs ${CATEGORY_STYLES[insight.category as Category] ?? 'bg-gray-500/15 text-gray-300'}`}>
+            <span className={`badge text-xs ${CATEGORY_STYLES[insight.category as Category] ?? 'bg-black/[0.04] text-black/60'}`}>
               {insight.category}
             </span>
             <span className={`badge ${IMPACT_STYLES[insight.impact]}`}>
               {insight.impact} Impact
             </span>
           </div>
-          <h3 className="text-sm font-semibold text-gray-100 leading-snug">
+          <h3 className="text-sm font-semibold text-black/80 leading-snug">
             {insight.title}
           </h3>
         </div>
       </div>
 
-      <p className="text-xs text-gray-400 leading-relaxed">{insight.description}</p>
+      <p className="text-xs text-black/40 leading-relaxed">{insight.description}</p>
 
       {expanded && (
-        <div className="bg-[#080d1a] border border-purple-500/20 rounded-lg p-3 mt-1">
-          <p className="text-xs font-medium text-purple-400 mb-1">💡 Recommendation</p>
-          <p className="text-xs text-gray-300 leading-relaxed">{insight.recommendation}</p>
+        <div className="bg-white/30 border border-emerald-200/50 rounded-lg p-3 mt-1">
+          <p className="text-xs font-medium text-emerald-600 mb-1">💡 Recommendation</p>
+          <p className="text-xs text-black/60 leading-relaxed">{insight.recommendation}</p>
         </div>
       )}
 
       <div className="flex items-center justify-between pt-1">
         <button
           onClick={onToggle}
-          className="text-xs text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-1"
+          className="text-xs text-emerald-600 hover:text-emerald-500 transition-colors flex items-center gap-1"
         >
           {expanded ? '▲ Hide details' : '▼ View recommendation'}
         </button>
@@ -283,8 +283,8 @@ export default function AIInsights() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-3 text-gray-500 text-sm">
-        <svg className="animate-spin h-6 w-6 text-purple-400" viewBox="0 0 24 24" fill="none">
+      <div className="flex flex-col items-center justify-center h-64 gap-3 text-black/35 text-sm">
+        <svg className="animate-spin h-6 w-6 text-emerald-600" viewBox="0 0 24 24" fill="none">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
@@ -301,17 +301,17 @@ export default function AIInsights() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-100">AI Insights</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-black/80">AI Insights</h1>
           <div className="flex items-center gap-2 flex-wrap mt-1">
             {cacheLabel && (
               <span className="text-emerald-500 text-xs">{cacheLabel}</span>
             )}
             {insightsLoadedAt ? (
-              <p className="text-gray-500 text-xs">
+              <p className="text-black/35 text-xs">
                 {cacheLabel ? '·' : ''} Last updated: {formatTimestamp(insightsLoadedAt)}
               </p>
             ) : (
-              <p className="text-gray-500 text-sm">Intelligence generated from your customer reviews.</p>
+              <p className="text-black/35 text-sm">Intelligence generated from your customer reviews.</p>
             )}
           </div>
         </div>
@@ -344,10 +344,10 @@ export default function AIInsights() {
       {!error && safeInsights.length === 0 && (
         <div className="card p-8 text-center">
           <p className="text-3xl mb-3">{noReviews ? '📋' : '🧠'}</p>
-          <p className="text-sm text-gray-300 font-medium mb-1">
+          <p className="text-sm text-black/60 font-medium mb-1">
             {noReviews ? 'No reviews yet' : 'No insights generated yet'}
           </p>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-black/35">
             {noReviews
               ? 'Fetch your Google reviews first, then click Refresh Insights to generate AI analysis.'
               : 'Click "Refresh Insights" above to generate AI insights from your reviews.'}
@@ -360,15 +360,15 @@ export default function AIInsights() {
           {/* Summary bar */}
           <div className="card p-4 flex flex-wrap gap-4">
             {[
-              { label: 'Total Insights', value: safeInsights.length,                                          color: 'text-gray-200'  },
+              { label: 'Total Insights', value: safeInsights.length,                                          color: 'text-black/70'  },
               { label: 'High Impact',    value: safeInsights.filter(i => i.impact === 'High').length,   color: 'text-red-400'   },
               { label: 'Medium Impact',  value: safeInsights.filter(i => i.impact === 'Medium').length, color: 'text-amber-400' },
               { label: 'Low Impact',     value: safeInsights.filter(i => i.impact === 'Low').length,    color: 'text-blue-400'  },
             ].map(({ label, value, color }) => (
               <div key={label} className="flex items-center gap-2">
                 <span className={`text-xl font-bold ${color}`}>{value}</span>
-                <span className="text-xs text-gray-500">{label}</span>
-                <span className="text-gray-700">·</span>
+                <span className="text-xs text-black/35">{label}</span>
+                <span className="text-black/25">·</span>
               </div>
             ))}
           </div>
@@ -381,8 +381,8 @@ export default function AIInsights() {
                 onClick={() => setFilter(f)}
                 className={`px-3 py-1.5 min-h-[36px] text-xs font-medium rounded-lg border transition-all whitespace-nowrap ${
                   filter === f
-                    ? 'bg-purple-500/20 border-purple-500/40 text-purple-300'
-                    : 'bg-transparent border-[#1e2d4a] text-gray-500 hover:border-purple-500/30 hover:text-gray-300'
+                    ? 'bg-emerald-100/50 border-emerald-300 text-emerald-600'
+                    : 'bg-transparent border-black/10 text-black/35 hover:border-emerald-300 hover:text-black/60'
                 }`}
               >
                 {f} {f !== 'All' && 'Impact'}
@@ -406,8 +406,8 @@ export default function AIInsights() {
           <div className="card p-4 flex gap-3 items-start">
             <span className="text-xl">🤖</span>
             <div>
-              <p className="text-xs font-medium text-gray-300 mb-1">About AI Insights</p>
-              <p className="text-xs text-gray-500 leading-relaxed">
+              <p className="text-xs font-medium text-black/60 mb-1">About AI Insights</p>
+              <p className="text-xs text-black/35 leading-relaxed">
                 Insights are generated by Claude AI analyzing patterns in your customer reviews.
                 High-impact items should be addressed within 7 days for maximum reputation benefit.
               </p>

@@ -51,9 +51,9 @@ function StarBar({ rating }: { rating: number }) {
   const pct = (rating / 5) * 100
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-[#1e2d4a] rounded-full overflow-hidden">
+      <div className="flex-1 h-1.5 bg-black/[0.06] rounded-full overflow-hidden">
         <div
-          className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full transition-all duration-700"
+          className="h-full bg-gradient-to-r from-emerald-400 to-cyan-400 rounded-full transition-all duration-700"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -67,8 +67,8 @@ function CustomTooltip({ active, payload, label }: {
 }) {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-[#0f1629] border border-[#1e2d4a] rounded-lg px-3 py-2 text-xs shadow-xl">
-      <p className="text-gray-300 font-medium mb-1">{label}</p>
+    <div className="bg-white/40 border border-black/10 rounded-lg px-3 py-2 text-xs shadow-xl">
+      <p className="text-black/60 font-medium mb-1">{label}</p>
       {payload.map((p, i) => (
         <p key={i} style={{ color: p.fill }}>
           {p.name}: <span className="font-bold">{p.value}★</span>
@@ -107,14 +107,14 @@ function InsightSection({
         <div className="flex items-center gap-2">
           <span className="text-lg">🔍</span>
           <div>
-            <h4 className="text-sm font-semibold text-gray-200">{competitor.name}</h4>
-            <p className="text-xs text-gray-500">Competitive Intelligence</p>
+            <h4 className="text-sm font-semibold text-black/70">{competitor.name}</h4>
+            <p className="text-xs text-black/35">Competitive Intelligence</p>
           </div>
         </div>
         <button
           onClick={() => onRefresh(competitorId)}
           disabled={loading}
-          className="text-xs text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+          className="text-xs text-emerald-600 hover:text-emerald-500 transition-colors flex items-center gap-1.5 disabled:opacity-50"
         >
           {loading ? <SpinnerIcon size={3} /> : '↻'} Refresh Insights
         </button>
@@ -125,7 +125,7 @@ function InsightSection({
       )}
 
       {loading && !data && (
-        <div className="flex items-center gap-2 text-xs text-gray-500 py-2">
+        <div className="flex items-center gap-2 text-xs text-black/35 py-2">
           <SpinnerIcon size={3} /> Analyzing competitor reviews…
         </div>
       )}
@@ -133,29 +133,29 @@ function InsightSection({
       {data && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {/* Review Velocity */}
-          <div className="bg-[#080d1a] rounded-lg p-3 border border-[#1e2d4a]">
+          <div className="bg-white/30 rounded-lg p-3 border border-black/10">
             <p className="text-xs font-medium text-blue-400 mb-1.5">📈 Review Velocity</p>
-            <p className="text-xs text-gray-400 leading-relaxed">{data.review_velocity}</p>
+            <p className="text-xs text-black/40 leading-relaxed">{data.review_velocity}</p>
           </div>
 
           {/* Rating Trend */}
-          <div className="bg-[#080d1a] rounded-lg p-3 border border-[#1e2d4a]">
+          <div className="bg-white/30 rounded-lg p-3 border border-black/10">
             <p className="text-xs font-medium text-amber-400 mb-1.5">📊 Rating Trend</p>
-            <p className="text-xs text-gray-400 leading-relaxed">{data.rating_trend}</p>
+            <p className="text-xs text-black/40 leading-relaxed">{data.rating_trend}</p>
           </div>
 
           {/* Their Biggest Weakness */}
-          <div className="bg-[#080d1a] rounded-lg p-3 border border-[#1e2d4a]">
+          <div className="bg-white/30 rounded-lg p-3 border border-black/10">
             <p className="text-xs font-medium text-red-400 mb-1.5">⚠️ Their Biggest Weakness</p>
-            <p className="text-xs text-gray-400 leading-relaxed">{data.biggest_weakness}</p>
+            <p className="text-xs text-black/40 leading-relaxed">{data.biggest_weakness}</p>
           </div>
 
           {/* Your Advantages */}
-          <div className="bg-[#080d1a] rounded-lg p-3 border border-[#1e2d4a]">
+          <div className="bg-white/30 rounded-lg p-3 border border-black/10">
             <p className="text-xs font-medium text-emerald-400 mb-1.5">✅ Your Advantages</p>
             <ul className="space-y-1">
               {(data.your_advantages ?? []).map((adv, i) => (
-                <li key={i} className="text-xs text-gray-400 flex items-start gap-1.5">
+                <li key={i} className="text-xs text-black/40 flex items-start gap-1.5">
                   <span className="text-emerald-500 shrink-0 mt-0.5">›</span>
                   {adv}
                 </li>
@@ -164,15 +164,15 @@ function InsightSection({
           </div>
 
           {/* Steal Their Customers — full width */}
-          <div className="sm:col-span-2 bg-purple-500/10 rounded-lg p-3 border border-purple-500/20">
-            <p className="text-xs font-medium text-purple-400 mb-1.5">🎯 Steal Their Customers</p>
-            <p className="text-xs text-gray-300 leading-relaxed">{data.steal_their_customers}</p>
+          <div className="sm:col-span-2 bg-emerald-50 rounded-lg p-3 border border-emerald-200/50">
+            <p className="text-xs font-medium text-emerald-600 mb-1.5">🎯 Steal Their Customers</p>
+            <p className="text-xs text-black/60 leading-relaxed">{data.steal_their_customers}</p>
           </div>
         </div>
       )}
 
       {insightState.generated_at && (
-        <p className="text-xs text-gray-600">
+        <p className="text-xs text-black/30">
           {insightState.cached ? '🗄 Cached · ' : '✨ Just generated · '}
           {new Date(insightState.generated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
         </p>
@@ -522,7 +522,7 @@ export default function CompetitorSpy() {
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-100">Competitor Spy</h1>
-          <p className="text-gray-500 text-sm mt-1">
+          <p className="text-black/35 text-sm mt-1">
             Fetch real Google reviews from competitors and compare with AI.
           </p>
         </div>
@@ -533,7 +533,7 @@ export default function CompetitorSpy() {
 
       {/* Input card */}
       <div className="card p-4 sm:p-6">
-        <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-4">
+        <p className="text-xs font-medium text-black/40 uppercase tracking-wider mb-4">
           Enter Competitor Names
         </p>
         <div className="space-y-3 mb-4">
@@ -558,7 +558,7 @@ export default function CompetitorSpy() {
         </div>
         {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
         {isLoading && loadingMsg && (
-          <p className="text-xs text-purple-400 mb-3 animate-pulse">{loadingMsg}</p>
+          <p className="text-xs text-emerald-600 mb-3 animate-pulse">{loadingMsg}</p>
         )}
         <button
           onClick={runSpy}
@@ -571,7 +571,7 @@ export default function CompetitorSpy() {
             <><span>🔍</span> Run Competitor Analysis</>
           )}
         </button>
-        <p className="text-xs text-gray-600 mt-2">
+        <p className="text-xs text-black/30 mt-2">
           Fetches 50 most-recent Google reviews per competitor. May take 1–2 minutes.
         </p>
       </div>
@@ -582,14 +582,14 @@ export default function CompetitorSpy() {
           {/* Results header with refresh */}
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-black/35">
                 {competitors.map(c => `${c.name}: ${c.fetched_count ?? 0} reviews in DB`).join(' · ')}
               </p>
             </div>
             <button
               onClick={handleRefreshData}
               disabled={isRefreshing}
-              className="text-xs text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              className="text-xs text-emerald-600 hover:text-emerald-500 transition-colors flex items-center gap-1.5 disabled:opacity-50"
             >
               {isRefreshing ? <SpinnerIcon size={3} /> : '↻'} Refresh Data
             </button>
@@ -598,8 +598,8 @@ export default function CompetitorSpy() {
           {/* Chart */}
           {chartData.length > 1 && (
             <div className="card p-4 sm:p-6">
-              <h3 className="text-sm font-semibold text-gray-200 mb-1">Rating Comparison</h3>
-              <p className="text-xs text-gray-500 mb-4">Google average rating vs. competitors</p>
+              <h3 className="text-sm font-semibold text-black/70 mb-1">Rating Comparison</h3>
+              <p className="text-xs text-black/35 mb-4">Google average rating vs. competitors</p>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: -20 }} barSize={40}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e2d4a" vertical={false} />
@@ -618,38 +618,38 @@ export default function CompetitorSpy() {
 
           {/* Comparison table */}
           <div className="card overflow-hidden">
-            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-[#1e2d4a]">
-              <h3 className="text-sm font-semibold text-gray-200">Detailed Comparison</h3>
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-black/10">
+              <h3 className="text-sm font-semibold text-black/70">Detailed Comparison</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-[#1e2d4a]">
+                  <tr className="border-b border-black/10">
                     {['Business', 'Google Rating', 'Reviews', 'Address'].map(h => (
-                      <th key={h} className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th key={h} className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-black/35 uppercase tracking-wider">
                         {h}
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#1e2d4a]">
+                <tbody className="divide-y divide-black/[0.05]">
                   {activeBusiness && (
-                    <tr className="bg-purple-500/5">
+                    <tr className="bg-emerald-50/50">
                       <td className="px-3 sm:px-6 py-3 sm:py-4">
                         <div className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
-                          <span className="text-sm font-semibold text-purple-300">{activeBusiness.name}</span>
-                          <span className="badge bg-purple-500/20 text-purple-400 border border-purple-500/30">You</span>
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                          <span className="text-sm font-semibold text-black/70">{activeBusiness.name}</span>
+                          <span className="badge bg-emerald-100 text-emerald-700 border border-emerald-200">You</span>
                         </div>
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 min-w-[120px]">
                         {activeBusiness.google_rating
                           ? <StarBar rating={activeBusiness.google_rating} />
-                          : <span className="text-xs text-gray-600">Not available</span>
+                          : <span className="text-xs text-black/30">Not available</span>
                         }
                       </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-300">{activeBusiness.total_reviews.toLocaleString()}</td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs text-gray-500">{activeBusiness.location}</td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-black/60">{activeBusiness.total_reviews.toLocaleString()}</td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs text-black/35">{activeBusiness.location}</td>
                     </tr>
                   )}
                   {competitors.map((c, i) => (
@@ -657,30 +657,30 @@ export default function CompetitorSpy() {
                       <td className="px-3 sm:px-6 py-3 sm:py-4">
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-blue-500 opacity-70 shrink-0" />
-                          <p className="text-sm text-gray-300 truncate">{c.name}</p>
+                          <p className="text-sm text-black/60 truncate">{c.name}</p>
                         </div>
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 min-w-[120px]">
                         {c.google_rating !== null
                           ? <StarBar rating={c.google_rating} />
-                          : <span className="text-xs text-gray-600">Not found</span>
+                          : <span className="text-xs text-black/30">Not found</span>
                         }
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4">
                         {c.fetched_count !== undefined && c.fetched_count > 0 ? (
                           <div>
-                            <span className="text-sm font-medium text-gray-200">{c.fetched_count} fetched</span>
+                            <span className="text-sm font-medium text-black/70">{c.fetched_count} fetched</span>
                             {c.total_reviews !== null && (
-                              <p className="text-xs text-gray-600">of {c.total_reviews.toLocaleString()} on Google</p>
+                              <p className="text-xs text-black/30">of {c.total_reviews.toLocaleString()} on Google</p>
                             )}
                           </div>
                         ) : (
-                          <span className="text-sm text-gray-500">
+                          <span className="text-sm text-black/35">
                             {c.total_reviews !== null ? c.total_reviews.toLocaleString() : '—'}
                           </span>
                         )}
                       </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs text-gray-500 max-w-[200px] truncate">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs text-black/35 max-w-[200px] truncate">
                         {c.full_address ?? c.location ?? '—'}
                       </td>
                     </tr>
@@ -701,10 +701,10 @@ export default function CompetitorSpy() {
               <div className={`card p-4 flex gap-3 ${youWin ? 'border-emerald-500/30' : 'border-amber-500/30'}`}>
                 <span className="text-2xl">{youWin ? '🏆' : '⚠️'}</span>
                 <div>
-                  <p className="text-sm font-semibold text-gray-200 mb-0.5">
+                  <p className="text-sm font-semibold text-black/70 mb-0.5">
                     {youWin ? "You're leading the pack!" : 'Room to improve'}
                   </p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-black/35">
                     {youWin
                       ? `Your ${myRating}★ rating outperforms your top competitor (${best.name} at ${best.google_rating}★). Keep it up!`
                       : myRating > 0
@@ -721,8 +721,8 @@ export default function CompetitorSpy() {
           {competitors.filter(c => c.id && (c.fetched_count ?? 0) > 0).length > 0 && (
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-semibold text-gray-200">Competitor Intelligence</h3>
-                <p className="text-xs text-gray-500 mt-0.5">AI-generated insights based on fetched reviews</p>
+                <h3 className="text-sm font-semibold text-black/70">Competitor Intelligence</h3>
+                <p className="text-xs text-black/35 mt-0.5">AI-generated insights based on fetched reviews</p>
               </div>
               {competitors
                 .filter(c => c.id && (c.fetched_count ?? 0) > 0)

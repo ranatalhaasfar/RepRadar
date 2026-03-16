@@ -147,7 +147,7 @@ function AnimatedNumber({ target }: { target: number }) {
 
 function TrendBadge({ trend, pct }: { trend: string; pct: number }) {
   if (trend === 'worsening') return (
-    <span className="flex items-center gap-1 text-xs font-medium text-red-400">
+    <span className="flex items-center gap-1 text-xs font-medium text-rose-600">
       <span className="relative flex h-1.5 w-1.5">
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
         <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-400" />
@@ -156,13 +156,13 @@ function TrendBadge({ trend, pct }: { trend: string; pct: number }) {
     </span>
   )
   if (trend === 'improving') return (
-    <span className="flex items-center gap-1 text-xs font-medium text-emerald-400">
+    <span className="flex items-center gap-1 text-xs font-medium text-emerald-600">
       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
       ↓ {pct}% improving
     </span>
   )
   return (
-    <span className="flex items-center gap-1 text-xs font-medium text-gray-500">
+    <span className="flex items-center gap-1 text-xs font-medium text-black/35">
       <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
       → stable
     </span>
@@ -173,7 +173,7 @@ function TrendBadge({ trend, pct }: { trend: string; pct: number }) {
 
 function SeverityBadge({ severity }: { severity: string }) {
   if (severity === 'critical') return (
-    <span className="relative flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/40">
+    <span className="relative flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-rose-600 border border-rose-200">
       <span className="relative flex h-1.5 w-1.5">
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
         <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-400" />
@@ -182,17 +182,17 @@ function SeverityBadge({ severity }: { severity: string }) {
     </span>
   )
   if (severity === 'serious') return (
-    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/40">
+    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-600 border border-orange-200">
       SERIOUS
     </span>
   )
   if (severity === 'moderate') return (
-    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40">
+    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 border border-amber-200">
       MODERATE
     </span>
   )
   return (
-    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-500/20 text-gray-400 border border-gray-600/40">
+    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/[0.06] text-black/40 border border-gray-600/40">
       MINOR
     </span>
   )
@@ -222,54 +222,50 @@ function CrisisAlertBanner({ report }: { report: IntelReport }) {
 
   if (level === 'crisis') {
     return (
-      <div className="relative overflow-hidden rounded-2xl border border-red-500/40 bg-gradient-to-r from-red-900/25 to-[#0a1020] p-5 flex items-center justify-between gap-4">
-        <div className="absolute inset-0 bg-gradient-to-r from-red-500/5 to-transparent pointer-events-none" />
-        <div className="flex items-center gap-4 relative z-10">
+      <div className="relative overflow-hidden rounded-2xl border border-rose-200 bg-rose-50 p-5 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
           <div className="relative shrink-0">
-            <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center text-2xl">🔴</div>
-            <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-red-500 animate-ping" />
-            <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-red-500" />
+            <div className="w-11 h-11 rounded-full bg-rose-100 flex items-center justify-center text-xl">🔴</div>
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500" />
           </div>
           <div>
-            <p className="text-lg font-black text-red-300 tracking-tight">CRISIS DETECTED — Immediate Action Required</p>
-            <p className="text-sm text-gray-300 mt-0.5">
+            <p className="text-base font-black text-rose-700 tracking-tight">CRISIS DETECTED — Immediate Action Required</p>
+            <p className="text-sm text-rose-600/70 mt-0.5">
               {criticalCount} critical issue{criticalCount !== 1 ? 's are' : ' is'} actively damaging your reputation
             </p>
-            <p className="text-xs text-red-400/80 mt-0.5">Your rating is at risk if left unaddressed</p>
           </div>
         </div>
-        <p className="text-xs text-gray-600 relative z-10 shrink-0">Updated {relativeTime(generated_at)}</p>
+        <p className="text-xs text-black/30 shrink-0">Updated {relativeTime(generated_at)}</p>
       </div>
     )
   }
 
   if (level === 'warning') {
     return (
-      <div className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-900/15 to-[#0a1020] p-5 flex items-center justify-between gap-4">
-        <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 to-transparent pointer-events-none" />
-        <div className="flex items-center gap-4 relative z-10">
-          <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center text-2xl shrink-0">🟡</div>
+      <div className="relative overflow-hidden rounded-2xl border border-amber-200 bg-amber-50 p-5 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="w-11 h-11 rounded-full bg-amber-100 flex items-center justify-center text-xl shrink-0">⚠️</div>
           <div>
-            <p className="text-lg font-black text-amber-300 tracking-tight">WARNING — {warningCount} issue{warningCount !== 1 ? 's' : ''} need attention this week</p>
-            <p className="text-sm text-gray-400 mt-0.5">Monitor closely and address before they escalate</p>
+            <p className="text-base font-black text-amber-700 tracking-tight">WARNING — {warningCount} issue{warningCount !== 1 ? 's' : ''} need attention this week</p>
+            <p className="text-sm text-amber-600/70 mt-0.5">Monitor closely and address before they escalate</p>
           </div>
         </div>
-        <p className="text-xs text-gray-600 relative z-10 shrink-0">Updated {relativeTime(generated_at)}</p>
+        <p className="text-xs text-black/30 shrink-0">Updated {relativeTime(generated_at)}</p>
       </div>
     )
   }
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-r from-emerald-900/15 to-[#0a1020] p-5 flex items-center justify-between gap-4">
-      <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-transparent pointer-events-none" />
-      <div className="flex items-center gap-4 relative z-10">
-        <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center text-2xl shrink-0">🟢</div>
+    <div className="relative overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50 p-5 flex items-center justify-between gap-4">
+      <div className="flex items-center gap-4">
+        <div className="w-11 h-11 rounded-full bg-emerald-100 flex items-center justify-center text-xl shrink-0">✅</div>
         <div>
-          <p className="text-lg font-black text-emerald-300 tracking-tight">HEALTHY — No significant issues detected</p>
-          <p className="text-sm text-gray-400 mt-0.5">Your reputation is stable and improving</p>
+          <p className="text-base font-black text-emerald-700 tracking-tight">HEALTHY — No significant issues detected</p>
+          <p className="text-sm text-emerald-600/70 mt-0.5">Your reputation is stable and improving</p>
         </div>
       </div>
-      <p className="text-xs text-gray-600 relative z-10 shrink-0">Updated {relativeTime(generated_at)}</p>
+      <p className="text-xs text-black/30 shrink-0">Updated {relativeTime(generated_at)}</p>
     </div>
   )
 }
@@ -281,8 +277,8 @@ function WinsSection({ wins }: { wins: BiggestWin[] }) {
   return (
     <div className="space-y-3">
       <div>
-        <h2 className="text-base font-bold text-gray-100">What's Working</h2>
-        <p className="text-xs text-gray-500 mt-0.5">Strengths customers repeatedly praise — double down on these</p>
+        <h2 className="text-base font-bold text-black/80">What's Working</h2>
+        <p className="text-xs text-black/35 mt-0.5">Strengths customers repeatedly praise — double down on these</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {wins.map((win, i) => (
@@ -295,12 +291,12 @@ function WinsSection({ wins }: { wins: BiggestWin[] }) {
             </span>
             <div className="relative z-10 flex items-center gap-2">
               <span className="text-xl">{win.icon}</span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
                 WINNING
               </span>
             </div>
-            <h3 className="text-sm font-bold text-gray-100 leading-snug relative z-10">{win.title}</h3>
-            <p className="text-xs text-emerald-300/80 leading-relaxed">{win.detail}</p>
+            <h3 className="text-sm font-bold text-black/80 leading-snug relative z-10">{win.title}</h3>
+            <p className="text-xs text-black/55 leading-relaxed">{win.detail}</p>
           </div>
         ))}
       </div>
@@ -314,8 +310,8 @@ const RANK_STYLES = [
   { border: 'border-l-red-500',    bg: 'bg-red-500/5',    rankColor: 'text-red-500/15',    dot: 'bg-red-500',    bar: 'bg-red-500'    },
   { border: 'border-l-orange-500', bg: 'bg-orange-500/5', rankColor: 'text-orange-500/15', dot: 'bg-orange-500', bar: 'bg-orange-500' },
   { border: 'border-l-yellow-500', bg: 'bg-yellow-500/5', rankColor: 'text-yellow-500/15', dot: 'bg-yellow-500', bar: 'bg-yellow-500' },
-  { border: 'border-l-gray-500',   bg: 'bg-gray-500/5',   rankColor: 'text-gray-500/15',   dot: 'bg-gray-500',   bar: 'bg-gray-600'   },
-  { border: 'border-l-gray-600',   bg: 'bg-gray-600/5',   rankColor: 'text-gray-600/15',   dot: 'bg-gray-600',   bar: 'bg-gray-700'   },
+  { border: 'border-l-gray-500',   bg: 'bg-gray-500/5',   rankColor: 'text-black/35/15',   dot: 'bg-gray-500',   bar: 'bg-gray-600'   },
+  { border: 'border-l-gray-600',   bg: 'bg-gray-600/5',   rankColor: 'text-black/30/15',   dot: 'bg-gray-600',   bar: 'bg-gray-700'   },
 ]
 
 function ProblemCard({ problem, maxCount, totalReviews, index, onViewReviews }: {
@@ -336,7 +332,7 @@ function ProblemCard({ problem, maxCount, totalReviews, index, onViewReviews }: 
 
   return (
     <div
-      className={`relative rounded-xl border border-[#1e2d4a] border-l-4 ${style.border} ${style.bg} p-5 flex flex-col gap-4 transition-all duration-300 hover:border-[#2d3f5e] hover:-translate-y-0.5`}
+      className={`relative rounded-xl border border-black/10 border-l-4 ${style.border} ${style.bg} p-5 flex flex-col gap-4 transition-all duration-300 hover:border-black/10 hover:-translate-y-0.5`}
     >
       {/* Ghost rank number */}
       <span className={`text-8xl font-black leading-none select-none ${style.rankColor} absolute top-3 right-4 pointer-events-none`}>
@@ -349,16 +345,16 @@ function ProblemCard({ problem, maxCount, totalReviews, index, onViewReviews }: 
           <SeverityBadge severity={problem.severity} />
           <TrendBadge trend={problem.trend} pct={problem.trend_pct} />
         </div>
-        <h3 className="text-base font-bold text-gray-100 leading-snug">{problem.name}</h3>
+        <h3 className="text-base font-bold text-black/80 leading-snug">{problem.name}</h3>
         <div className="flex items-center gap-2">
-          <span className="text-2xl font-black text-gray-200">{problem.mention_count}</span>
-          <span className="text-xs text-gray-500">mentions · {pct}% of reviews</span>
+          <span className="text-2xl font-black text-black/70">{problem.mention_count}</span>
+          <span className="text-xs text-black/35">mentions · {pct}% of reviews</span>
         </div>
       </div>
 
       {/* First seen */}
       {problem.first_seen && (
-        <p className="text-[11px] text-gray-500">
+        <p className="text-[11px] text-black/35">
           First appeared {weeksAgo(problem.first_seen)}
         </p>
       )}
@@ -366,9 +362,9 @@ function ProblemCard({ problem, maxCount, totalReviews, index, onViewReviews }: 
       {/* Volume bar */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[10px] text-gray-600 uppercase tracking-wider">Complaint Volume</span>
+          <span className="text-[10px] text-black/30 uppercase tracking-wider">Complaint Volume</span>
         </div>
-        <div className="h-2 bg-[#1e2d4a] rounded-full overflow-hidden">
+        <div className="h-2 bg-black/[0.06] rounded-full overflow-hidden">
           <div
             className={`h-full ${style.bar} rounded-full transition-all duration-700`}
             style={{ width: `${barWidth}%` }}
@@ -378,7 +374,7 @@ function ProblemCard({ problem, maxCount, totalReviews, index, onViewReviews }: 
 
       {/* Velocity */}
       {isAccelerating && lastThree.some(v => v > 0) && (
-        <p className="text-[11px] text-red-400/80">
+        <p className="text-[11px] text-rose-600">
           Accelerating — {lastThree.map((v) => `${v}`).join(' → ')} mentions (last 3 weeks)
         </p>
       )}
@@ -387,7 +383,7 @@ function ProblemCard({ problem, maxCount, totalReviews, index, onViewReviews }: 
       {(problem.snippets ?? []).length > 0 && (
         <div className="space-y-1.5">
           {(problem.snippets ?? []).slice(0, 2).map((s, i) => (
-            <blockquote key={i} className="text-xs text-gray-400 italic border-l-2 border-[#1e2d4a] pl-3 leading-relaxed">
+            <blockquote key={i} className="text-xs text-black/40 italic border-l-2 border-black/10 pl-3 leading-relaxed">
               "{s}…"
             </blockquote>
           ))}
@@ -396,16 +392,16 @@ function ProblemCard({ problem, maxCount, totalReviews, index, onViewReviews }: 
 
       {/* Business impact */}
       {problem.low_star_correlation > 0 && (
-        <p className="text-[11px] text-amber-400/80">
+        <p className="text-[11px] text-amber-600">
           Correlates with {problem.low_star_correlation} of your lowest-rated reviews
         </p>
       )}
 
       {/* Specific action */}
       {problem.specific_action && (
-        <div className="bg-[#080d1a] border border-purple-500/15 rounded-lg p-3">
-          <p className="text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-1">Recommended Action</p>
-          <p className="text-xs text-gray-300 leading-relaxed">{problem.specific_action}</p>
+        <div className="bg-white/30 border border-emerald-200/40 rounded-lg p-3">
+          <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-1">Recommended Action</p>
+          <p className="text-xs text-black/60 leading-relaxed">{problem.specific_action}</p>
         </div>
       )}
 
@@ -413,7 +409,7 @@ function ProblemCard({ problem, maxCount, totalReviews, index, onViewReviews }: 
       {(problem.review_indices ?? []).length > 0 && (
         <button
           onClick={() => onViewReviews(problem.review_indices ?? [], problem.match_reasons ?? [])}
-          className="text-xs text-purple-400 hover:text-purple-300 transition-colors self-start flex items-center gap-1 mt-auto"
+          className="text-xs text-emerald-600 hover:text-emerald-500 transition-colors self-start flex items-center gap-1 mt-auto"
         >
           View {problem.review_indices.length} related reviews →
         </button>
@@ -433,13 +429,13 @@ function TimelineSection({ problems, weekBuckets }: { problems: Problem[]; weekB
   if (top3.length === 0) return null
 
   const severityColor = (s: string) =>
-    s === 'critical' ? 'text-red-400' : s === 'serious' ? 'text-orange-400' : s === 'moderate' ? 'text-amber-400' : 'text-gray-400'
+    s === 'critical' ? 'text-rose-600' : s === 'serious' ? 'text-orange-600' : s === 'moderate' ? 'text-amber-600' : 'text-black/40'
 
   return (
     <div className="card p-5 space-y-5">
       <div>
-        <h2 className="text-base font-bold text-gray-100">When Did This Start?</h2>
-        <p className="text-xs text-gray-500 mt-0.5">Weekly complaint volume over the last 8 weeks</p>
+        <h2 className="text-base font-bold text-black/80">When Did This Start?</h2>
+        <p className="text-xs text-black/35 mt-0.5">Weekly complaint volume over the last 8 weeks</p>
       </div>
       <div className="space-y-5">
         {top3.map(problem => {
@@ -461,19 +457,19 @@ function TimelineSection({ problems, weekBuckets }: { problems: Problem[]; weekB
                     problem.severity === 'moderate' ? 'bg-amber-500' : 'bg-gray-500'
                   return (
                     <div key={i} className="flex flex-col items-center gap-1 flex-1">
-                      <span className={`text-[9px] ${count > 0 ? 'text-gray-400' : 'text-gray-700'}`}>{count > 0 ? count : ''}</span>
+                      <span className={`text-[9px] ${count > 0 ? 'text-black/40' : 'text-black/25'}`}>{count > 0 ? count : ''}</span>
                       <div
                         className={`w-full rounded-t-sm transition-all ${barColor} ${isLast ? 'opacity-100' : 'opacity-60'}`}
                         style={{ height: `${height}px` }}
                       />
-                      <span className="text-[8px] text-gray-600 truncate w-full text-center">{weekBuckets[i] ?? `W${i+1}`}</span>
+                      <span className="text-[8px] text-black/30 truncate w-full text-center">{weekBuckets[i] ?? `W${i+1}`}</span>
                     </div>
                   )
                 })}
                 <div className="flex flex-col items-center gap-1 shrink-0 ml-1">
-                  <span className="text-[9px] text-purple-400 font-bold">← now</span>
-                  <div className="w-px h-[40px] bg-purple-500/30" />
-                  <span className="text-[8px] text-purple-500/50">here</span>
+                  <span className="text-[9px] text-emerald-600 font-bold">← now</span>
+                  <div className="w-px h-[40px] bg-emerald-300/50" />
+                  <span className="text-[8px] text-emerald-600/50">here</span>
                 </div>
               </div>
             </div>
@@ -516,14 +512,14 @@ function TrendChart({ problems, weekBuckets }: { problems: Problem[]; weekBucket
   return (
     <div className="card p-5 space-y-4">
       <div>
-        <h2 className="text-base font-bold text-gray-100">Are Your Problems Getting Better or Worse?</h2>
-        <p className="text-xs text-gray-500 mt-0.5">Complaint volume over the last 8 weeks</p>
+        <h2 className="text-base font-bold text-black/80">Are Your Problems Getting Better or Worse?</h2>
+        <p className="text-xs text-black/35 mt-0.5">Complaint volume over the last 8 weeks</p>
       </div>
       <div className="flex flex-wrap gap-4">
         {top3.map((p, i) => (
           <div key={p.name} className="flex items-center gap-1.5">
             <span className="w-3 h-0.5 rounded" style={{ backgroundColor: colors[i] }} />
-            <span className="text-xs text-gray-400">{p.name}</span>
+            <span className="text-xs text-black/40">{p.name}</span>
           </div>
         ))}
       </div>
@@ -535,7 +531,7 @@ function TrendChart({ problems, weekBuckets }: { problems: Problem[]; weekBucket
           onMouseLeave={() => setTooltip(null)}
         >
           {[0, 0.25, 0.5, 0.75, 1].map(t => (
-            <line key={t} x1={padL} y1={padT + innerH * (1 - t)} x2={chartW - padR} y2={padT + innerH * (1 - t)} stroke="#1e2d4a" strokeWidth={1} />
+            <line key={t} x1={padL} y1={padT + innerH * (1 - t)} x2={chartW - padR} y2={padT + innerH * (1 - t)} stroke="rgba(0,0,0,0.06)" strokeWidth={1} />
           ))}
           {weekBuckets.map((label, i) => (
             <text key={i} x={xScale(i)} y={chartH - 4} textAnchor="middle" fontSize={8} fill="#4b5563">{label}</text>
@@ -582,15 +578,15 @@ function TrendChart({ problems, weekBuckets }: { problems: Problem[]; weekBucket
         </svg>
         {tooltip && (
           <div
-            className="absolute top-0 pointer-events-none bg-[#0a1020] border border-[#1e2d4a] rounded-lg p-2 text-xs shadow-lg"
+            className="absolute top-0 pointer-events-none bg-white/80 border border-black/10 rounded-lg p-2 text-xs shadow-lg"
             style={{ left: `clamp(0px, ${(tooltip.x / chartW) * 100}%, calc(100% - 140px))`, transform: 'translateY(10px)' }}
           >
-            <p className="text-gray-400 mb-1.5 font-medium">{tooltip.label}</p>
+            <p className="text-black/40 mb-1.5 font-medium">{tooltip.label}</p>
             {tooltip.values.map(v => (
               <div key={v.name} className="flex items-center gap-1.5 mb-0.5">
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: v.color }} />
-                <span className="text-gray-300">{v.count}</span>
-                <span className="text-gray-500 truncate max-w-[80px]">{v.name}</span>
+                <span className="text-black/60">{v.count}</span>
+                <span className="text-black/35 truncate max-w-[80px]">{v.name}</span>
               </div>
             ))}
           </div>
@@ -607,8 +603,8 @@ function CompetitorSection({ competitors }: { competitors: CompetitorAnalysis[];
     return (
       <div className="card p-8 text-center space-y-2">
         <p className="text-2xl">🔍</p>
-        <p className="text-sm font-medium text-gray-300">No competitor data yet</p>
-        <p className="text-xs text-gray-500">Add competitors in Competitor Spy to unlock this section</p>
+        <p className="text-sm font-medium text-black/60">No competitor data yet</p>
+        <p className="text-xs text-black/35">Add competitors in Competitor Spy to unlock this section</p>
       </div>
     )
   }
@@ -618,7 +614,7 @@ function CompetitorSection({ competitors }: { competitors: CompetitorAnalysis[];
       key:       'weaknesses'    as const,
       icon:      '🔴',
       label:     'Their Complaints',
-      textColor: 'text-red-400',
+      textColor: 'text-rose-600',
       dotColor:  'text-red-500',
       emptyMsg:  'No complaints detected',
     },
@@ -626,7 +622,7 @@ function CompetitorSection({ competitors }: { competitors: CompetitorAnalysis[];
       key:       'they_do_better' as const,
       icon:      '🟡',
       label:     'They Beat Us',
-      textColor: 'text-amber-400',
+      textColor: 'text-amber-600',
       dotColor:  'text-amber-500',
       emptyMsg:  'No clear advantages',
     },
@@ -634,7 +630,7 @@ function CompetitorSection({ competitors }: { competitors: CompetitorAnalysis[];
       key:       'opportunities'  as const,
       icon:      '🟢',
       label:     'Our Opportunity',
-      textColor: 'text-emerald-400',
+      textColor: 'text-emerald-600',
       dotColor:  'text-emerald-500',
       emptyMsg:  'Generating opportunities…',
     },
@@ -643,25 +639,25 @@ function CompetitorSection({ competitors }: { competitors: CompetitorAnalysis[];
   return (
     <div className="card p-5 space-y-5">
       <div>
-        <h2 className="text-base font-bold text-gray-100">Competitive Intelligence</h2>
-        <p className="text-xs text-gray-500 mt-0.5">Their weaknesses, their edges, your moves</p>
+        <h2 className="text-base font-bold text-black/80">Competitive Intelligence</h2>
+        <p className="text-xs text-black/35 mt-0.5">Their weaknesses, their edges, your moves</p>
       </div>
 
       <div className="space-y-4">
         {competitors.map(comp => {
           const gap = comp.rating_gap ?? 0
           return (
-            <div key={comp.id} className="bg-[#080d1a] border border-[#1a2540] rounded-xl overflow-hidden">
+            <div key={comp.id} className="bg-white/30 border border-black/10 rounded-xl overflow-hidden">
 
               {/* Competitor header */}
-              <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[#1a2540]">
+              <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-black/10">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-800 to-blue-900 flex items-center justify-center text-xs font-bold text-gray-200 shrink-0">
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-xs font-bold text-black/70 shrink-0">
                     {comp.name[0]?.toUpperCase()}
                   </div>
-                  <span className="text-sm font-semibold text-gray-100">{comp.name}</span>
+                  <span className="text-sm font-semibold text-black/80">{comp.name}</span>
                 </div>
-                <div className="flex items-center gap-3 text-[11px] text-gray-400 flex-wrap justify-end">
+                <div className="flex items-center gap-3 text-[11px] text-black/40 flex-wrap justify-end">
                   {comp.google_rating != null && (
                     <span className="text-yellow-400 font-medium">⭐ {comp.google_rating}</span>
                   )}
@@ -669,7 +665,7 @@ function CompetitorSection({ competitors }: { competitors: CompetitorAnalysis[];
                     <span>{comp.total_reviews.toLocaleString()} reviews</span>
                   )}
                   {comp.google_rating != null && gap !== 0 && (
-                    <span className={`font-semibold ${gap > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <span className={`font-semibold ${gap > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {gap > 0 ? `+${gap} vs them` : `${gap} vs you`}
                     </span>
                   )}
@@ -677,7 +673,7 @@ function CompetitorSection({ competitors }: { competitors: CompetitorAnalysis[];
               </div>
 
               {/* 3-column grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-[#1a2540]">
+              <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-black/10">
                 {columns.map(col => {
                   const raw = comp[col.key]
                   const items: string[] = toStringArray(raw)
@@ -687,11 +683,11 @@ function CompetitorSection({ competitors }: { competitors: CompetitorAnalysis[];
                         {col.icon} {col.label}
                       </p>
                       {items.length === 0 ? (
-                        <p className="text-[11px] text-gray-600 italic">{col.emptyMsg}</p>
+                        <p className="text-[11px] text-black/30 italic">{col.emptyMsg}</p>
                       ) : (
                         <ul className="space-y-1.5">
                           {items.map((item, i) => (
-                            <li key={i} className="flex items-start gap-1.5 text-[11px] text-gray-300">
+                            <li key={i} className="flex items-start gap-1.5 text-[11px] text-black/60">
                               <span className={`${col.dotColor} shrink-0 mt-0.5`}>•</span>
                               {typeof item === 'string' ? item : JSON.stringify(item)}
                             </li>
@@ -721,7 +717,7 @@ function ActionItem({ text }: { text: string }) {
       className={`w-full flex items-start gap-3 text-left py-2 px-3 rounded-lg transition-all ${checked ? 'opacity-50' : 'hover:bg-white/3'}`}
     >
       <span className={`mt-0.5 w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-colors ${
-        checked ? 'bg-purple-500/30 border-purple-500/50 text-purple-300' : 'border-[#2d3f5e]'
+        checked ? 'bg-emerald-200/50 border-emerald-400 text-emerald-600' : 'border-black/10'
       }`}>
         {checked && (
           <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -729,7 +725,7 @@ function ActionItem({ text }: { text: string }) {
           </svg>
         )}
       </span>
-      <span className={`text-xs leading-relaxed ${checked ? 'line-through text-gray-600' : 'text-gray-300'}`}>{text}</span>
+      <span className={`text-xs leading-relaxed ${checked ? 'line-through text-black/30' : 'text-black/60'}`}>{text}</span>
     </button>
   )
 }
@@ -743,16 +739,16 @@ function StatRow({ label, current, previous, delta, positiveIsUp, decimals = 0 }
   decimals?:   number
 }) {
   const isPositive = positiveIsUp ? delta >= 0 : delta <= 0
-  const color      = delta === 0 ? 'text-gray-500' : isPositive ? 'text-emerald-400' : 'text-red-400'
+  const color      = delta === 0 ? 'text-black/35' : isPositive ? 'text-emerald-600' : 'text-rose-600'
   const arrow      = delta === 0 ? '→' : delta > 0 ? '↑' : '↓'
 
   return (
-    <div className="flex items-center justify-between py-2 border-b border-[#1a2540]">
-      <span className="text-xs text-gray-500">{label}</span>
+    <div className="flex items-center justify-between py-2 border-b border-black/10">
+      <span className="text-xs text-black/35">{label}</span>
       <div className="flex items-center gap-3">
-        <span className="text-xs text-gray-600">{previous.toFixed(decimals)}</span>
-        <span className="text-gray-700">→</span>
-        <span className="text-sm font-bold text-gray-200">{current.toFixed(decimals)}</span>
+        <span className="text-xs text-black/30">{previous.toFixed(decimals)}</span>
+        <span className="text-black/25">→</span>
+        <span className="text-sm font-bold text-black/70">{current.toFixed(decimals)}</span>
         <span className={`text-xs font-semibold ${color}`}>{arrow} {Math.abs(delta).toFixed(decimals)}</span>
       </div>
     </div>
@@ -768,17 +764,17 @@ function WeeklyBriefSection({ brief }: { brief: WeeklyBrief }) {
 
   return (
     <div className="card overflow-hidden">
-      <div className="px-5 py-4 border-b border-[#1e2d4a] bg-gradient-to-r from-purple-900/20 to-transparent flex items-center justify-between">
+      <div className="px-5 py-4 border-b border-black/10 bg-gradient-to-r from-emerald-50/50 to-transparent flex items-center justify-between">
         <div>
-          <p className="text-[10px] font-bold text-purple-400 uppercase tracking-widest">Intelligence Brief</p>
-          <h2 className="text-sm font-bold text-gray-200 mt-0.5">{brief.week_label}</h2>
+          <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Intelligence Brief</p>
+          <h2 className="text-sm font-bold text-black/70 mt-0.5">{brief.week_label}</h2>
         </div>
         <span className="text-xl">📰</span>
       </div>
 
       <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-4">
-          <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">This Week vs Last Week</h3>
+          <h3 className="text-xs font-bold text-black/35 uppercase tracking-wider">This Week vs Last Week</h3>
           <div className="space-y-3">
             <StatRow
               label="New Reviews"
@@ -800,13 +796,13 @@ function WeeklyBriefSection({ brief }: { brief: WeeklyBrief }) {
           </div>
         </div>
         <div className="space-y-3">
-          <div className="bg-[#080d1a] rounded-lg p-3 border border-[#1e2d4a]">
-            <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider mb-1">🎯 Your #1 Priority This Week</p>
-            <p className="text-xs text-gray-200 leading-relaxed">{brief.top_priority || 'Keep engaging with customer reviews.'}</p>
+          <div className="bg-white/30 rounded-lg p-3 border border-black/10">
+            <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mb-1">🎯 Your #1 Priority This Week</p>
+            <p className="text-xs text-black/70 leading-relaxed">{brief.top_priority || 'Keep engaging with customer reviews.'}</p>
           </div>
-          <div className="bg-[#080d1a] rounded-lg p-3 border border-[#1e2d4a]">
-            <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-1">🏆 Biggest Win This Week</p>
-            <p className="text-xs text-gray-200 leading-relaxed">{brief.biggest_win || 'Continue delivering great service.'}</p>
+          <div className="bg-white/30 rounded-lg p-3 border border-black/10">
+            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-1">🏆 Biggest Win This Week</p>
+            <p className="text-xs text-black/70 leading-relaxed">{brief.biggest_win || 'Continue delivering great service.'}</p>
           </div>
         </div>
       </div>
@@ -814,9 +810,24 @@ function WeeklyBriefSection({ brief }: { brief: WeeklyBrief }) {
       {/* Narrative paragraph */}
       {brief.narrative && (
         <div className="px-5 pb-4">
-          <div className="bg-[#080d1a] rounded-xl p-4 border border-purple-500/10">
-            <p className="text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-2">AI Consultant Summary</p>
-            <p className="text-xs text-gray-300 leading-relaxed">{brief.narrative}</p>
+          <div className="bg-white/30 rounded-xl p-4 border border-emerald-200/30">
+            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-3">AI Consultant Summary</p>
+            <div className="space-y-2.5">
+              {brief.narrative
+                .split(/(?<=[.!?])\s+(?=[A-Z])/)
+                .reduce<string[][]>((groups, sentence, i) => {
+                  const g = Math.floor(i / 3)
+                  if (!groups[g]) groups[g] = []
+                  groups[g].push(sentence)
+                  return groups
+                }, [])
+                .map((sentences, i) => (
+                  <p key={i} className="text-sm text-black/60 leading-[1.75]">
+                    {sentences.join(' ')}
+                  </p>
+                ))
+              }
+            </div>
           </div>
         </div>
       )}
@@ -824,7 +835,7 @@ function WeeklyBriefSection({ brief }: { brief: WeeklyBrief }) {
       {/* Action items checklist */}
       {Array.isArray(brief.action_items) && brief.action_items.length > 0 && (
         <div className="px-5 pb-5">
-          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-3">Action Items</p>
+          <p className="text-[10px] font-bold text-black/35 uppercase tracking-wider mb-3">Action Items</p>
           <div className="space-y-2">
             {brief.action_items.map((item, i) => (
               <ActionItem key={i} text={item} />
@@ -850,19 +861,19 @@ function UnansweredTracker({ unansweredCount, oldestUnanswered, onNavigateRespon
       <div className="flex items-start gap-3">
         <span className="text-xl shrink-0 mt-0.5">⚠️</span>
         <div className="space-y-2 flex-1">
-          <h3 className="text-sm font-bold text-amber-300">
+          <h3 className="text-sm font-bold text-amber-700">
             {unansweredCount} negative review{unansweredCount !== 1 ? 's' : ''} have never been responded to
           </h3>
           {oldestUnanswered && (
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-black/40">
               Oldest unanswered: {relativeTime(oldestUnanswered)}
             </p>
           )}
-          <p className="text-xs text-gray-400">
-            Average response rate: <span className="text-red-400 font-semibold">0%</span>{' '}
-            <span className="text-gray-500">(industry average: 67%)</span>
+          <p className="text-xs text-black/40">
+            Average response rate: <span className="text-rose-600 font-semibold">0%</span>{' '}
+            <span className="text-black/35">(industry average: 67%)</span>
           </p>
-          <p className="text-xs text-gray-600 mt-1">
+          <p className="text-xs text-black/30 mt-1">
             Businesses that respond to reviews average 0.4 stars higher than those that don't
           </p>
           <div className="flex gap-2 mt-3">
@@ -898,25 +909,25 @@ function HealthScoreSection({ score, breakdown, problems }: {
     <div className="card p-6 space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-base font-bold text-gray-100">Business Health Score</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Calculated from your review sentiment and complaint patterns</p>
+          <h2 className="text-base font-bold text-black/80">Business Health Score</h2>
+          <p className="text-xs text-black/35 mt-0.5">Calculated from your review sentiment and complaint patterns</p>
         </div>
         <div className="flex items-end gap-3 shrink-0">
           <span className="text-5xl font-black" style={{ color }}>
             <AnimatedNumber target={score} />
           </span>
-          <span className="text-xl text-gray-600 pb-1">/100</span>
+          <span className="text-xl text-black/30 pb-1">/100</span>
           <span className="text-sm font-bold pb-1" style={{ color }}>{label}</span>
         </div>
       </div>
 
       {/* Score bar */}
       <div className="space-y-2">
-        <div className="h-3 bg-[#1e2d4a] rounded-full overflow-hidden">
+        <div className="h-3 bg-black/[0.06] rounded-full overflow-hidden">
           <div className="h-full rounded-full transition-all duration-1000" style={{ width: `${score}%`, backgroundColor: color }} />
         </div>
         {potTop3 > score && (
-          <div className="relative h-2 bg-[#1e2d4a] rounded-full overflow-hidden">
+          <div className="relative h-2 bg-black/[0.06] rounded-full overflow-hidden">
             <div className="h-full rounded-full opacity-30 transition-all duration-1000" style={{ width: `${potTop3}%`, backgroundColor: '#a855f7' }} />
             <div className="absolute top-0 h-full rounded-full opacity-60" style={{ left: `${score}%`, width: `${potTop3 - score}%`, backgroundColor: '#a855f7' }} />
           </div>
@@ -929,13 +940,13 @@ function HealthScoreSection({ score, breakdown, problems }: {
           {/* Deductions */}
           {breakdown.deductions.length > 0 && (
             <div className="space-y-2">
-              <p className="text-[10px] font-bold text-red-400 uppercase tracking-wider">↓ What's Dragging You Down</p>
+              <p className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">↓ What's Dragging You Down</p>
               {breakdown.deductions.map(d => (
-                <div key={d.name} className="flex items-center gap-2 text-xs text-gray-400">
+                <div key={d.name} className="flex items-center gap-2 text-xs text-black/40">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
                   <span className="flex-1 truncate">{d.name}</span>
-                  <span className="text-red-400 font-semibold shrink-0">{d.points}pts</span>
-                  <span className="text-gray-600 text-[10px] shrink-0">{d.trend}</span>
+                  <span className="text-rose-600 font-semibold shrink-0">{d.points}pts</span>
+                  <span className="text-black/30 text-[10px] shrink-0">{d.trend}</span>
                 </div>
               ))}
             </div>
@@ -943,35 +954,35 @@ function HealthScoreSection({ score, breakdown, problems }: {
 
           {/* Boosts or potential */}
           <div className="space-y-2">
-            <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">↑ What's Keeping You Afloat</p>
+            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">↑ What's Keeping You Afloat</p>
             {breakdown.boosts.length > 0 ? (
               breakdown.boosts.map(b => (
-                <div key={b.name} className="flex items-center gap-2 text-xs text-gray-400">
+                <div key={b.name} className="flex items-center gap-2 text-xs text-black/40">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                   {b.name}
                   <span className="text-emerald-500 ml-auto">+{b.points}pts</span>
                 </div>
               ))
             ) : (
-              <p className="text-xs text-gray-600">Your positive reviews are maintaining the baseline</p>
+              <p className="text-xs text-black/30">Your positive reviews are maintaining the baseline</p>
             )}
           </div>
         </div>
       )}
 
       {/* Projections */}
-      <div className="bg-[#080d1a] border border-purple-500/15 rounded-xl p-4 space-y-2">
-        <p className="text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-3">Score Improvement Potential</p>
+      <div className="bg-white/30 border border-emerald-200/40 rounded-xl p-4 space-y-2">
+        <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-3">Score Improvement Potential</p>
         {top1Name && (
           <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-400">If you fix <span className="text-gray-200 font-medium">{top1Name}</span> alone:</span>
-            <span className="font-bold text-purple-300">score → {potTop1}/100</span>
+            <span className="text-black/40">If you fix <span className="text-black/70 font-medium">{top1Name}</span> alone:</span>
+            <span className="font-bold text-emerald-600">score → {potTop1}/100</span>
           </div>
         )}
         {safeProblems.length >= 3 && (
           <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-400">If you fix all top 3 issues:</span>
-            <span className="font-bold text-purple-300">score → {potTop3}/100</span>
+            <span className="text-black/40">If you fix all top 3 issues:</span>
+            <span className="font-bold text-emerald-600">score → {potTop3}/100</span>
           </div>
         )}
       </div>
@@ -1031,12 +1042,12 @@ function ReviewModal({ indices, matchReasons, bizId, onClose }: {
 
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-[#0f1629] border border-[#1e2d4a] rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1e2d4a]">
-          <p className="text-sm font-semibold text-gray-200">Related Negative Reviews ({allReviews.length || indices.length})</p>
+      <div className="bg-white/40 border border-black/10 rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-black/10">
+          <p className="text-sm font-semibold text-black/70">Related Negative Reviews ({allReviews.length || indices.length})</p>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-500 hover:text-gray-200 hover:bg-white/5 transition-colors"
+            className="p-1.5 rounded-lg text-black/35 hover:text-black/70 hover:bg-black/[0.03] transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1044,34 +1055,34 @@ function ReviewModal({ indices, matchReasons, bizId, onClose }: {
           </button>
         </div>
         <div className="overflow-y-auto p-4 space-y-3">
-          {loading && <div className="text-center text-xs text-gray-500 py-6">Loading reviews…</div>}
-          {!loading && fetchError && <div className="text-center text-xs text-red-400 py-6">{fetchError}</div>}
+          {loading && <div className="text-center text-xs text-black/35 py-6">Loading reviews…</div>}
+          {!loading && fetchError && <div className="text-center text-xs text-rose-600 py-6">{fetchError}</div>}
           {!loading && !fetchError && allReviews.length === 0 && (
-            <div className="text-center text-xs text-gray-500 py-6">No matching reviews found</div>
+            <div className="text-center text-xs text-black/35 py-6">No matching reviews found</div>
           )}
           {(allReviews as (ReviewRow & { originalIndex: number })[]).map((r, i) => {
             const reason = reasonMap.get(r.originalIndex)
             return (
-              <div key={i} className="bg-[#080d1a] border border-[#1e2d4a] rounded-xl p-3 space-y-1.5">
+              <div key={i} className="bg-white/30 border border-black/10 rounded-xl p-3 space-y-1.5">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-medium text-gray-300">{r.reviewer_name || 'Anonymous'}</span>
+                  <span className="text-xs font-medium text-black/60">{r.reviewer_name || 'Anonymous'}</span>
                   {r.rating != null && (
                     <span className="text-xs text-yellow-400">{'⭐'.repeat(Math.min(r.rating, 5))}</span>
                   )}
                   {r.sentiment && (
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                      r.sentiment === 'positive' ? 'bg-emerald-500/15 text-emerald-400' :
-                      r.sentiment === 'negative' ? 'bg-red-500/15 text-red-400' :
-                      'bg-gray-500/15 text-gray-400'
+                      r.sentiment === 'positive' ? 'bg-emerald-500/15 text-emerald-600' :
+                      r.sentiment === 'negative' ? 'bg-red-500/15 text-rose-600' :
+                      'bg-black/[0.04] text-black/40'
                     }`}>{r.sentiment}</span>
                   )}
                   {r.reviewed_at && (
-                    <span className="text-[10px] text-gray-600">{relativeTime(r.reviewed_at)}</span>
+                    <span className="text-[10px] text-black/30">{relativeTime(r.reviewed_at)}</span>
                   )}
                 </div>
-                <p className="text-xs text-gray-400 leading-relaxed">{r.review_text || '(no text)'}</p>
+                <p className="text-xs text-black/40 leading-relaxed">{r.review_text || '(no text)'}</p>
                 {reason && (
-                  <div className="text-[10px] text-purple-400/70">
+                  <div className="text-[10px] text-emerald-600/70">
                     Matched: "{reason.matchedKeyword}"{reason.matchedIndicator ? ` + "${reason.matchedIndicator}"` : ''} · negative review
                   </div>
                 )}
@@ -1098,25 +1109,25 @@ function PageHeader({ businessName, report, generating, onGenerate, onDownload }
   return (
     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-100">
+        <h1 className="text-xl sm:text-2xl font-bold text-black/80">
           Intelligence
-          {businessName && <span className="text-gray-500 font-normal text-base"> — {businessName}</span>}
+          {businessName && <span className="text-black/35 font-normal text-base"> — {businessName}</span>}
         </h1>
         <div className="flex items-center gap-2 mt-1 flex-wrap">
           {report?.generated_at && (
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-black/35">
               Generated {relativeTime(report.generated_at)} · refreshes every 7 days
             </p>
           )}
           {isStale && <span className="text-xs text-amber-500/70 italic">Data may be stale</span>}
-          {!report && <p className="text-xs text-gray-500">Premium intelligence briefing</p>}
+          {!report && <p className="text-xs text-black/35">Premium intelligence briefing</p>}
         </div>
       </div>
       <div className="flex gap-2 flex-wrap shrink-0 no-print">
         {onDownload && report && (
           <button
             onClick={onDownload}
-            className="px-3 py-2 min-h-[40px] text-xs text-purple-400 border border-purple-500/30 hover:bg-purple-500/10 rounded-lg transition-all flex items-center gap-1.5"
+            className="px-3 py-2 min-h-[40px] text-xs text-emerald-600 border border-emerald-300/50 hover:bg-emerald-50 rounded-lg transition-all flex items-center gap-1.5"
           >
             ⬇ Download Report
           </button>
@@ -1337,7 +1348,7 @@ export default function Intelligence() {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
         <p className="text-2xl">🎯</p>
-        <p className="text-sm text-gray-400">Select a business to view intelligence</p>
+        <p className="text-sm text-black/40">Select a business to view intelligence</p>
       </div>
     )
   }
@@ -1350,12 +1361,12 @@ export default function Intelligence() {
         <PageHeader businessName={businessName} report={null} generating={generating} onGenerate={generateReport} onDownload={null} />
         <div className="card p-10 text-center space-y-3">
           <p className="text-4xl">📋</p>
-          <p className="text-base font-semibold text-gray-200">Not enough reviews yet</p>
-          <p className="text-sm text-gray-400">
+          <p className="text-base font-semibold text-black/70">Not enough reviews yet</p>
+          <p className="text-sm text-black/40">
             You have <span className="text-white font-bold">{count}</span> review{count !== 1 ? 's' : ''}.
             Intelligence requires at least <span className="text-white font-bold">5</span> reviews to generate.
           </p>
-          <p className="text-xs text-gray-600">Fetch more reviews from the Dashboard to unlock this feature.</p>
+          <p className="text-xs text-black/30">Fetch more reviews from the Dashboard to unlock this feature.</p>
         </div>
       </div>
     )
@@ -1366,7 +1377,7 @@ export default function Intelligence() {
     return (
       <div className="space-y-6">
         <PageHeader businessName={businessName} report={null} generating={generating} onGenerate={generateReport} onDownload={null} />
-        <div className="card p-6 flex items-center gap-3 text-red-400 text-sm">
+        <div className="card p-6 flex items-center gap-3 text-rose-600 text-sm">
           <span>⚠</span>
           <span>{error}</span>
           <button onClick={generateReport} className="ml-auto underline text-xs hover:no-underline">Retry</button>
@@ -1383,13 +1394,13 @@ export default function Intelligence() {
         <div className="card p-10 text-center space-y-5">
           <p className="text-6xl">🎯</p>
           <div>
-            <p className="text-lg font-bold text-gray-100">Generate Intelligence Report</p>
-            <p className="text-sm text-gray-400 mt-1">for {businessName}</p>
+            <p className="text-lg font-bold text-black/80">Generate Intelligence Report</p>
+            <p className="text-sm text-black/40 mt-1">for {businessName}</p>
           </div>
-          <p className="text-sm text-gray-500 max-w-md mx-auto leading-relaxed">
+          <p className="text-sm text-black/35 max-w-md mx-auto leading-relaxed">
             Detects your top problems, tracks complaint trends, analyses competitors, and produces a frank weekly brief — powered by Claude Sonnet.
           </p>
-          <div className="text-xs text-gray-600 italic">
+          <div className="text-xs text-black/30 italic">
             AI Insights shows what customers say. Intelligence shows what it means and what to do about it.
           </div>
           <button
@@ -1429,7 +1440,7 @@ export default function Intelligence() {
       />
 
       {/* Differentiation banner */}
-      <div className="text-xs text-gray-600 italic border-b border-[#1e2d4a] pb-3">
+      <div className="text-xs text-black/30 italic border-b border-black/10 pb-3">
         AI Insights shows what customers say. Intelligence shows what it means for your business and what to do about it.
       </div>
 
@@ -1443,8 +1454,8 @@ export default function Intelligence() {
       {report.problems.length > 0 ? (
         <>
           <div>
-            <h2 className="text-base font-bold text-gray-100 mb-1">Top Problems Detected</h2>
-            <p className="text-xs text-gray-500">
+            <h2 className="text-base font-bold text-black/80 mb-1">Top Problems Detected</h2>
+            <p className="text-xs text-black/35">
               From {report.total_reviews} reviews — only reviews that are topically relevant AND negative
             </p>
           </div>
@@ -1478,8 +1489,8 @@ export default function Intelligence() {
       ) : (
         <div className="card p-8 text-center space-y-2">
           <p className="text-2xl">✅</p>
-          <p className="text-sm text-gray-300">No recurring problems detected</p>
-          <p className="text-xs text-gray-500">Your customers are happy across all areas.</p>
+          <p className="text-sm text-black/60">No recurring problems detected</p>
+          <p className="text-xs text-black/35">Your customers are happy across all areas.</p>
         </div>
       )}
 
@@ -1516,8 +1527,8 @@ export default function Intelligence() {
       {/* Download CTA at bottom */}
       <div className="card p-5 flex items-center justify-between gap-4 no-print">
         <div>
-          <p className="text-sm font-semibold text-gray-200">Download this report</p>
-          <p className="text-xs text-gray-500 mt-0.5">Save a text copy of this intelligence briefing</p>
+          <p className="text-sm font-semibold text-black/70">Download this report</p>
+          <p className="text-xs text-black/35 mt-0.5">Save a text copy of this intelligence briefing</p>
         </div>
         <button
           onClick={() => downloadPDF(report, businessName)}

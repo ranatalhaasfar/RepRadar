@@ -31,21 +31,21 @@ export default class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-[#060b18] flex items-center justify-center p-6">
+        <div className="min-h-screen flex items-center justify-center p-6" style={{ background: 'linear-gradient(145deg, #E8F0EC, #EBE8E4)' }}>
           <div className="max-w-md w-full text-center space-y-4">
             <p className="text-4xl">⚠️</p>
-            <h1 className="text-lg font-semibold text-gray-100">Something went wrong</h1>
-            <p className="text-sm text-gray-500">
+            <h1 className="text-lg font-semibold text-black/80">Something went wrong</h1>
+            <p className="text-sm text-black/40">
               The page ran into an unexpected error. Clicking refresh will clear the local cache and reload.
             </p>
             <button
               onClick={this.handleRefresh}
-              className="mt-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium rounded-lg transition-colors"
+              className="mt-2 px-5 py-2.5 btn-primary text-sm font-medium rounded-lg transition-colors"
             >
               Click here to refresh
             </button>
             {this.state.error && (
-              <p className="text-[11px] text-gray-700 font-mono break-all">
+              <p className="text-[11px] text-black/30 font-mono break-all">
                 {this.state.error.message}
               </p>
             )}

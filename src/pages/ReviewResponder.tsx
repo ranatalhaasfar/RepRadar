@@ -117,8 +117,8 @@ export default function ReviewResponder() {
 
       {/* Header */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-100">Review Responder</h1>
-        <p className="text-gray-500 text-sm mt-1">
+        <h1 className="text-xl sm:text-2xl font-bold text-black/80">Review Responder</h1>
+        <p className="text-black/35 text-sm mt-1">
           Paste any customer review and generate a perfect AI response instantly.
         </p>
       </div>
@@ -128,7 +128,7 @@ export default function ReviewResponder() {
 
         {/* Review input */}
         <div>
-          <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
+          <label className="block text-xs font-medium text-black/40 uppercase tracking-wider mb-2">
             Customer Review
           </label>
           <textarea
@@ -139,14 +139,14 @@ export default function ReviewResponder() {
             rows={6}
             className="input-dark resize-none text-sm leading-relaxed"
           />
-          <p className="text-xs text-gray-600 mt-1 text-right">
+          <p className="text-xs text-black/30 mt-1 text-right">
             {review.length > 0 ? `${review.length} chars` : 'No review entered'}
           </p>
         </div>
 
         {/* Tone selector */}
         <div>
-          <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
+          <label className="block text-xs font-medium text-black/40 uppercase tracking-wider mb-3">
             Response Tone
           </label>
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
@@ -156,22 +156,22 @@ export default function ReviewResponder() {
                 onClick={() => setTone(opt.value)}
                 className={`relative flex flex-col items-center gap-1 sm:gap-1.5 p-3 sm:p-4 min-h-[80px] rounded-xl border-2 transition-all duration-150 text-center ${
                   tone === opt.value
-                    ? 'border-purple-500 bg-purple-500/10'
-                    : 'border-[#1e2d4a] bg-[#080d1a] hover:border-purple-500/40'
+                    ? 'border-emerald-400 bg-emerald-50'
+                    : 'border-black/10 bg-white/30 hover:border-emerald-300'
                 }`}
               >
                 {tone === opt.value && (
-                  <span className="absolute top-2 right-2 w-4 h-4 bg-purple-500 rounded-full flex items-center justify-center">
+                  <span className="absolute top-2 right-2 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
                     <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                       <path d="M2 5l2.5 2.5L8 3" />
                     </svg>
                   </span>
                 )}
                 <span className="text-2xl">{opt.icon}</span>
-                <span className={`text-sm font-semibold ${tone === opt.value ? 'text-purple-300' : 'text-gray-300'}`}>
+                <span className={`text-sm font-semibold ${tone === opt.value ? 'text-emerald-600' : 'text-black/60'}`}>
                   {opt.label}
                 </span>
-                <span className={`text-xs ${tone === opt.value ? 'text-purple-400' : 'text-gray-600'}`}>
+                <span className={`text-xs ${tone === opt.value ? 'text-emerald-600' : 'text-black/30'}`}>
                   {opt.description}
                 </span>
               </button>
@@ -203,12 +203,12 @@ export default function ReviewResponder() {
           <div ref={responseRef}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+                <span className="text-xs font-medium text-black/40 uppercase tracking-wider">
                   Generated Response
                 </span>
                 {isLoading && (
-                  <span className="badge bg-purple-500/20 text-purple-400 border border-purple-500/30">
-                    <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-pulse mr-1" />
+                  <span className="badge bg-emerald-100/50 text-emerald-600 border border-emerald-300/50">
+                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse mr-1" />
                     Writing…
                   </span>
                 )}
@@ -224,30 +224,30 @@ export default function ReviewResponder() {
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-all ${
                     copied
                       ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                      : 'bg-[#080d1a] border-[#1e2d4a] text-gray-400 hover:border-purple-500/40 hover:text-gray-200'
+                      : 'bg-white/30 border-black/10 text-black/40 hover:border-emerald-300 hover:text-black/70'
                   }`}
                 >
                   {copied ? '✓ Copied!' : '📋 Copy to Clipboard'}
                 </button>
               )}
             </div>
-            <div className="bg-[#080d1a] border border-[#1e2d4a] rounded-xl p-5 min-h-[80px]">
+            <div className="bg-white/30 border border-black/10 rounded-xl p-5 min-h-[80px]">
               {response ? (
-                <p className="text-gray-300 leading-relaxed text-sm whitespace-pre-wrap">
+                <p className="text-black/60 leading-relaxed text-sm whitespace-pre-wrap">
                   {response}
                   {isLoading && (
-                    <span className="inline-block w-0.5 h-4 bg-purple-400 ml-0.5 animate-pulse align-middle" />
+                    <span className="inline-block w-0.5 h-4 bg-emerald-500 ml-0.5 animate-pulse align-middle" />
                   )}
                 </p>
               ) : (
-                <div className="flex items-center gap-2 text-gray-600 text-sm">
+                <div className="flex items-center gap-2 text-black/30 text-sm">
                   <SpinnerIcon className="h-4 w-4" />
                   <span>Crafting your response…</span>
                 </div>
               )}
             </div>
             {response && !isLoading && (
-              <p className="text-xs text-gray-600 mt-2 text-right">
+              <p className="text-xs text-black/30 mt-2 text-right">
                 Powered by Claude AI · {tone} tone
               </p>
             )}
@@ -258,11 +258,11 @@ export default function ReviewResponder() {
 
       {/* Tips */}
       <div className="card p-4">
-        <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">💡 Pro Tips</p>
-        <ul className="space-y-2 text-xs text-gray-500">
-          <li className="flex gap-2"><span className="text-purple-500">→</span> Always personalize the generated response with specific details before posting</li>
-          <li className="flex gap-2"><span className="text-purple-500">→</span> Respond to negative reviews within 24 hours to minimize damage</li>
-          <li className="flex gap-2"><span className="text-purple-500">→</span> Use the Apologetic tone for 1-2 star reviews, Friendly for 4-5 stars</li>
+        <p className="text-xs font-medium text-black/40 uppercase tracking-wider mb-3">💡 Pro Tips</p>
+        <ul className="space-y-2 text-xs text-black/35">
+          <li className="flex gap-2"><span className="text-emerald-600">→</span> Always personalize the generated response with specific details before posting</li>
+          <li className="flex gap-2"><span className="text-emerald-600">→</span> Respond to negative reviews within 24 hours to minimize damage</li>
+          <li className="flex gap-2"><span className="text-emerald-600">→</span> Use the Apologetic tone for 1-2 star reviews, Friendly for 4-5 stars</li>
         </ul>
       </div>
 

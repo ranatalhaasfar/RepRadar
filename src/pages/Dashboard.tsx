@@ -9,6 +9,10 @@ import { useAppStore } from '../store/appStore'
 import { lcSave, lcLoad, lcClear } from '../lib/localCache'
 import type { Business, Review } from '../lib/supabase'
 import type { SentimentPoint, Category } from '../store/appStore'
+import { StarRating } from '../components/StarRating'
+import { DashboardSkeleton } from '../components/Skeletons'
+import ReputationGauge from '../components/ReputationGauge'
+import { FileText, Smile, Frown, Award, RefreshCw, Download, Lightbulb, Search, AlertCircle } from 'lucide-react'
 
 // ── Outscraper limits ──────────────────────────────────────────────────────
 
@@ -29,7 +33,6 @@ type KeywordEntry = { word: string; count: number }
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function buildTimeline(reviews: Review[]): SentimentPoint[] {
-  // Group by month using reviewed_at; fall back to bucket index if no dates
   const monthMap = new Map<string, { positive: number; negative: number; total: number; ts: number }>()
 
   for (const r of reviews) {
@@ -51,7 +54,6 @@ function buildTimeline(reviews: Review[]): SentimentPoint[] {
     else if (r.sentiment === 'negative') b.negative++
   }
 
-  // If all reviews lack dates, fall back to bucket-based with ordinal labels
   if (monthMap.size <= 1 && monthMap.has('Unknown')) {
     const bucketSize = Math.max(1, Math.ceil(reviews.length / 8))
     const buckets: { positive: number; negative: number; total: number }[] = []
@@ -118,110 +120,39 @@ function relativeDate(ts: string | null | undefined): string {
 }
 
 const VERDICT_CONFIG: Record<string, { bg: string; border: string; badge: string; text: string }> = {
-  'Strength':          { bg: 'bg-emerald-500/10', border: 'border-emerald-500/25', badge: 'bg-emerald-500/20 text-emerald-300', text: 'text-emerald-400' },
-  'Needs Improvement': { bg: 'bg-amber-500/10',   border: 'border-amber-500/25',   badge: 'bg-amber-500/20 text-amber-300',   text: 'text-amber-400'   },
-  'Critical Issue':    { bg: 'bg-red-500/10',     border: 'border-red-500/25',     badge: 'bg-red-500/20 text-red-300',      text: 'text-red-400'     },
+  'Strength':          { bg: 'bg-emerald-50',  border: 'border-emerald-200', badge: 'bg-emerald-50 text-emerald-700', text: 'text-emerald-700' },
+  'Needs Improvement': { bg: 'bg-amber-50',    border: 'border-amber-200',   badge: 'bg-amber-50 text-amber-700',   text: 'text-amber-700'   },
+  'Critical Issue':    { bg: 'bg-rose-50',     border: 'border-rose-200',    badge: 'bg-rose-50 text-rose-700',     text: 'text-rose-700'    },
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 
-function StatCard({ icon, value, label, sub, color = 'text-gray-100', glow = '' }: {
-  icon: string; value: string | number; label: string; sub?: string; color?: string; glow?: string
-}) {
+function SectionLabel({ title, sub, className = '' }: { title: string; sub?: string; className?: string }) {
   return (
-    <div className={`relative overflow-hidden rounded-xl border border-[#1e2d4a] bg-gradient-to-br from-[#0f1629] to-[#0a0f1e] p-5 flex items-start gap-4 transition-all hover:border-[#2d3f5e]`}>
-      {glow && <div className={`absolute top-0 right-0 w-24 h-24 ${glow} opacity-[0.08] rounded-full -translate-y-8 translate-x-8 blur-2xl pointer-events-none`} />}
-      <span className="text-2xl mt-0.5 relative z-10">{icon}</span>
-      <div className="min-w-0 relative z-10">
-        <p className={`text-3xl font-extrabold ${color} leading-none mb-1 tracking-tight`}>{value}</p>
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
-        {sub && <p className="text-[10px] text-gray-600 mt-0.5">{sub}</p>}
+    <div className={`flex items-center gap-2 mb-4 ${className}`}>
+      <div className="inline-flex items-center gap-2 bg-white/60 backdrop-blur-sm border border-white/80 rounded-full px-3 py-1 shadow-sm">
+        <span className="text-[11px] font-bold text-black/55 tracking-wide">{title}</span>
       </div>
+      {sub && <span className="text-[11px] text-black/35">{sub}</span>}
     </div>
   )
 }
 
-function ReputationGauge({ score }: { score: number }) {
-  // viewBox 200×145 — arc center at (100, 95), radius 78, strokeWidth 14
-  // Extra height below center gives room for score text + labels.
-  // Semicircle: 180° (left) → 0° (right) through top.
-  // strokeLinecap="butt" so segments meet cleanly with no overlap/gap.
-
-  const cx = 100, cy = 95, r = 78
-  const C    = 2 * Math.PI * r   // ≈ 490.09
-  const semi = C / 2             // ≈ 245.04
-  const dpx  = semi / 180        // units per degree ≈ 1.3613
-
-  // Arc segment lengths (degrees × dpx)
-  const redLen    = 72 * dpx   // 180°→108°  (0–40)
-  const orangeLen = 54 * dpx   // 108°→54°   (41–70)
-  const greenLen  = 54 * dpx   //  54°→0°    (71–100)
-
-  // Needle: score 0→100 maps to angle 180°→0°
-  const angleDeg = 180 - score * 1.8
-  const angleRad = (angleDeg * Math.PI) / 180
-  const nLen = 66
-  const nx = cx + nLen * Math.cos(angleRad)
-  const ny = cy - nLen * Math.sin(angleRad)
-
-  const scoreColor = score <= 40 ? '#ef4444' : score <= 70 ? '#f59e0b' : '#22c55e'
-
-  // All colored arcs share these props
-  const arc = {
-    cx, cy, r,
-    fill: 'none',
-    strokeWidth: 14,
-    strokeLinecap: 'butt' as const,   // butt = no caps → seamless joins
-    transform: `rotate(-180 ${cx} ${cy})`,
-  }
-
+function StatCard({ icon, value, label, sub, colorClass, barClass, iconBg }: {
+  icon: React.ReactNode; value: string | number; label: string; sub?: string
+  colorClass: string; barClass: string; iconBg: string
+}) {
   return (
-    <div className="flex flex-col items-center">
-      <svg viewBox="0 0 200 145" className="w-full max-w-[260px]"
-        aria-label={`Reputation score: ${score} out of 100`}>
-
-        {/* Dark background track */}
-        <circle {...arc} stroke="#1e2d4a" strokeDasharray={`${semi} ${C}`} />
-
-        {/* Red 0–40 */}
-        <circle {...arc} stroke="#ef4444"
-          strokeDasharray={`${redLen} ${C}`}
-          strokeDashoffset={0} />
-
-        {/* Orange 41–70 */}
-        <circle {...arc} stroke="#f59e0b"
-          strokeDasharray={`${orangeLen} ${C}`}
-          strokeDashoffset={-redLen} />
-
-        {/* Green 71–100 */}
-        <circle {...arc} stroke="#22c55e"
-          strokeDasharray={`${greenLen} ${C}`}
-          strokeDashoffset={-(redLen + orangeLen)} />
-
-        {/* Needle line */}
-        <line x1={cx} y1={cy} x2={nx} y2={ny}
-          stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-
-        {/* Hub */}
-        <circle cx={cx} cy={cy} r="6" fill="#94a3b8" />
-        <circle cx={cx} cy={cy} r="3" fill="#0f172a" />
-
-        {/* Score — below center, clear of needle */}
-        <text x={cx} y={cy + 18} textAnchor="middle"
-          fill={scoreColor} fontSize="26" fontWeight="800" fontFamily="inherit">
-          {score}
-        </text>
-        <text x={cx} y={cy + 30} textAnchor="middle"
-          fill="#6b7280" fontSize="10" fontFamily="inherit">
-          /100
-        </text>
-
-        {/* Scale labels at very bottom */}
-        <text x="20"  y="142" textAnchor="middle" fill="#6b7280" fontSize="9" fontFamily="inherit">0</text>
-        <text x={cx}  y="142" textAnchor="middle" fill="#6b7280" fontSize="9" fontFamily="inherit">50</text>
-        <text x="180" y="142" textAnchor="middle" fill="#6b7280" fontSize="9" fontFamily="inherit">100</text>
-
-      </svg>
+    <div className="glass-card p-5 flex items-start gap-4 animate-enter">
+      <div className={`w-9 h-9 rounded-[12px] ${iconBg} flex items-center justify-center flex-shrink-0`}>
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className={`font-mono text-[42px] font-bold leading-none mb-1 tracking-tight ${colorClass}`} style={{ fontVariantNumeric: 'tabular-nums' }}>{value}</p>
+        <div className={`${barClass} h-1 w-10 rounded-full mb-1`} />
+        <p className="text-[11px] text-black/30 uppercase tracking-[0.08em] font-semibold">{label}</p>
+        {sub && <p className="text-[11px] text-black/30 mt-0.5">{sub}</p>}
+      </div>
     </div>
   )
 }
@@ -233,23 +164,12 @@ function CustomTooltip({ active, payload, label }: {
 }) {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-[#0f1629] border border-[#1e2d4a] rounded-lg px-3 py-2 text-xs shadow-xl">
-      <p className="text-gray-400 mb-1">{label}</p>
+    <div className="bg-white/80 backdrop-blur-xl border border-white/60 rounded-xl px-3 py-2 text-xs shadow-glass">
+      <p className="text-black/40 mb-1 font-medium">{label}</p>
       {payload.map((p, i) => (
-        <p key={i} style={{ color: p.color }}>{p.name}: <span className="font-bold">{p.value}%</span></p>
+        <p key={i} style={{ color: p.color }} className="font-semibold">{p.name}: <span>{p.value}%</span></p>
       ))}
     </div>
-  )
-}
-
-function StarRating({ rating }: { rating: number | null }) {
-  if (rating === null) return null
-  return (
-    <span className="flex items-center gap-0.5">
-      {[1,2,3,4,5].map(i => (
-        <span key={i} className={`text-sm leading-none ${i <= rating ? 'text-yellow-400' : 'text-gray-700'}`}>★</span>
-      ))}
-    </span>
   )
 }
 
@@ -258,7 +178,6 @@ function StarRating({ rating }: { rating: number | null }) {
 export default function Dashboard() {
   const { user } = useAuth()
 
-  // ── Zustand store ──
   const {
     activeBusiness, activeBusinessId,
     business, reviews, dashboardLoadedAt, dashboardBusinessId, setDashboard,
@@ -266,7 +185,6 @@ export default function Dashboard() {
     setPendingReviewText, setPendingNavPage, setShowUpgradeModal,
   } = useAppStore()
 
-  // ── Local UI state (not persisted — fine to reset on reload) ──
   const [loading,         setLoading]         = useState(false)
   const [analysisLoading, setAnalysisLoading] = useState(false)
   const [analysisError,   setAnalysisError]   = useState('')
@@ -279,23 +197,18 @@ export default function Dashboard() {
   const [timeline,        setTimeline]        = useState<SentimentPoint[]>([])
   const [initializing,    setInitializing]    = useState(true)
 
-  // ── Category state ──
   const [catLoading,      setCatLoading]      = useState(false)
   const [catError,        setCatError]        = useState('')
   const [activeCategory,  setActiveCategory]  = useState<string | null>(null)
   const [catVisibleCount, setCatVisibleCount] = useState(10)
 
-  // ── Review expand state ──
   const [expandedReviews, setExpandedReviews] = useState<Set<string>>(new Set())
 
-  // ── Category filter state ──
   const [catSearch,    setCatSearch]    = useState('')
   const [catSentiment, setCatSentiment] = useState<'all' | 'positive' | 'negative' | 'neutral'>('all')
   const [catDate,      setCatDate]      = useState<'all' | '7d' | '30d' | '3m' | '6m' | '1y'>('all')
   const [catRating,    setCatRating]    = useState<'all' | '5' | '4' | '3' | '12'>('all')
   const [catSort,      setCatSort]      = useState<'newest' | 'oldest' | 'highest' | 'lowest'>('newest')
-
-  // ── On mount / business switch: load from store → Supabase (never auto-call Anthropic) ──
 
   useEffect(() => {
     if (!user) return
@@ -314,9 +227,8 @@ export default function Dashboard() {
     const bizData = activeBusiness
     if (!bizData) { setInitializing(false); return }
 
-    // 1️⃣ Zustand store hit — render instantly
     if (dashboardBusinessId === bizData.id && dashboardLoadedAt !== null && reviews.length > 0) {
-      console.log('[Dashboard] ✅ Layer 1 hit — Zustand store')
+      console.log('[Dashboard] Layer 1 hit - Zustand store')
       setKeywords(Array.isArray(bizData.keywords) ? bizData.keywords : [])
       setTimeline(buildTimeline(reviews))
       setFromCache(true)
@@ -324,10 +236,9 @@ export default function Dashboard() {
       return
     }
 
-    // 2️⃣ localStorage hit — survives browser refresh
     const lsData = lcLoad<{ business: Business; reviews: Review[] }>('reviews', bizData.id)
     if (lsData && Array.isArray(lsData.data?.reviews) && lsData.data.reviews.length > 0) {
-      console.log('[Dashboard] ✅ Layer 2 hit — localStorage', `(saved ${new Date(lsData.savedAt).toLocaleTimeString()})`)
+      console.log('[Dashboard] Layer 2 hit - localStorage')
       const { business: cachedBiz, reviews: cachedRevs } = lsData.data
       setDashboard(cachedBiz, cachedRevs, bizData.id)
       setKeywords(Array.isArray(cachedBiz.keywords) ? cachedBiz.keywords : [])
@@ -337,8 +248,7 @@ export default function Dashboard() {
       return
     }
 
-    // 3️⃣ Supabase — permanent DB storage
-    console.log('[Dashboard] 🗄 Layer 3 — fetching from Supabase')
+    console.log('[Dashboard] Layer 3 - fetching from Supabase')
     setLoading(true)
     try {
       const { data: revData, error: revErr } = await supabase
@@ -350,11 +260,9 @@ export default function Dashboard() {
 
       const revs: Review[] = revData ?? []
 
-      // Save to Layer 1 (Zustand) and Layer 2 (localStorage)
       setDashboard(bizData as Business, revs, bizData.id)
       if (revs.length > 0) {
         lcSave('reviews', bizData.id, { business: bizData as Business, reviews: revs })
-        console.log('[Dashboard] ✅ Layer 3 hit — Supabase, saved to localStorage')
       }
 
       if (revs.length === 0) {
@@ -367,14 +275,10 @@ export default function Dashboard() {
       const hasKeywords = Array.isArray(bizData.keywords) && bizData.keywords.length > 0
 
       if (unanalyzedRevs.length === 0) {
-        // All analyzed — load from cache
-        console.log('[Dashboard] ✅ All reviews analyzed — loading from cache, NO Anthropic call')
         setKeywords(hasKeywords ? bizData.keywords! : [])
         setTimeline(buildTimeline(revs))
         setFromCache(true)
       } else {
-        // New unanalyzed reviews — run analysis
-        console.log(`[Dashboard] 🌐 ${unanalyzedRevs.length} new unanalyzed reviews — calling Anthropic`)
         setKeywords(hasKeywords ? bizData.keywords! : [])
         setTimeline(buildTimeline(revs))
         await runAnalysis(unanalyzedRevs, bizData.id, revs)
@@ -388,8 +292,6 @@ export default function Dashboard() {
     }
   }
 
-  // ── Manual full reload (Refresh button) ─────────────────────────────────
-
   const reloadDashboard = async (forceReanalyze = false) => {
     if (!user) return
     setLoading(true)
@@ -400,7 +302,6 @@ export default function Dashboard() {
       const bizData = activeBusiness
       if (!bizData) return
 
-      // Clear Layer 2 (localStorage) so we reload fresh from Supabase
       lcClear('reviews', bizData.id)
 
       const { data: revData, error: revErr } = await supabase
@@ -422,17 +323,14 @@ export default function Dashboard() {
       const hasKeywords = Array.isArray(bizData.keywords) && bizData.keywords.length > 0
 
       if (!forceReanalyze && unanalyzedRevs.length === 0) {
-        console.log('[Dashboard] ✅ Refreshed from cache — NO Anthropic call')
         setKeywords(hasKeywords ? bizData.keywords! : [])
         setTimeline(buildTimeline(revs))
         setFromCache(true)
       } else if (forceReanalyze) {
-        console.log('[Dashboard] 🌐 Force re-analyze — calling Anthropic')
         setKeywords(hasKeywords ? bizData.keywords! : [])
         setTimeline(buildTimeline(revs))
         await runAnalysis(revs, bizData.id, revs)
       } else {
-        console.log(`[Dashboard] 🌐 ${unanalyzedRevs.length} unanalyzed — calling Anthropic`)
         setKeywords(hasKeywords ? bizData.keywords! : [])
         setTimeline(buildTimeline(revs))
         await runAnalysis(unanalyzedRevs, bizData.id, revs)
@@ -449,7 +347,6 @@ export default function Dashboard() {
     setAnalysisLoading(true)
     setAnalysisError('')
     try {
-      // Split: reviews with text go to AI; rating-only reviews get star-based sentiment
       const withText   = revsToAnalyze.filter(r => r.review_text.trim().length > 0)
       const ratingOnly = revsToAnalyze.filter(r => r.review_text.trim().length === 0)
 
@@ -458,10 +355,8 @@ export default function Dashboard() {
 
       const sentimentMap = new Map<string, 'positive' | 'negative' | 'neutral'>()
 
-      // Assign star-based sentiment for rating-only reviews immediately
       ratingOnly.forEach(r => sentimentMap.set(r.id, starSentiment(r.rating)))
 
-      // Send only text reviews to AI (skip if none)
       if (withText.length > 0) {
         const res = await fetch('/api/analyze-reviews', {
           method:  'POST',
@@ -476,7 +371,6 @@ export default function Dashboard() {
           sentimentMap.set(r.id, (data.reviewSentiments[i] ?? 'neutral') as 'positive' | 'negative' | 'neutral')
         })
 
-        // Update business-level stats from AI response
         const mergedRevs: Review[] = allRevs.map(r =>
           sentimentMap.has(r.id) ? { ...r, sentiment: sentimentMap.get(r.id)! } : r
         )
@@ -496,7 +390,6 @@ export default function Dashboard() {
         if (refreshed) {
           setDashboard(refreshed as Business, mergedRevs, businessId)
           lcSave('reviews', businessId, { business: refreshed as Business, reviews: mergedRevs })
-          console.log('[Dashboard] ✅ Analysis complete — saved to localStorage')
         }
       }
 
@@ -504,7 +397,6 @@ export default function Dashboard() {
         await supabase.from('reviews').update({ sentiment: sentimentMap.get(r.id) }).eq('id', r.id)
       }
 
-      // If there were no text reviews, still update business stats / local state
       if (withText.length === 0) {
         const mergedRevs: Review[] = allRevs.map(r =>
           sentimentMap.has(r.id) ? { ...r, sentiment: sentimentMap.get(r.id)! } : r
@@ -523,7 +415,6 @@ export default function Dashboard() {
         if (refreshed) {
           setDashboard(refreshed as Business, mergedRevs, businessId)
           lcSave('reviews', businessId, { business: refreshed as Business, reviews: mergedRevs })
-          console.log('[Dashboard] ✅ Analysis complete (rating-only) — saved to localStorage')
         }
       }
 
@@ -539,12 +430,12 @@ export default function Dashboard() {
     if (!business?.place_id || !user) return
 
     if (typeof business.place_id !== 'string' || !business.place_id.startsWith('ChIJ')) {
-      setFetchError('Invalid business ID — cannot fetch reviews. Please re-add this business.')
+      setFetchError('Invalid business ID - cannot fetch reviews. Please re-add this business.')
       return
     }
 
-    const isAdmin = user.email === 'pajamapoems00@gmail.com'
-    if (!isAdmin && !isStale(business.reviews_fetched_at, 7)) {
+    const isAdminUser = user.email === 'pajamapoems00@gmail.com'
+    if (!isAdminUser && !isStale(business.reviews_fetched_at, 7)) {
       setFetchError('Reviews were fetched less than 7 days ago. Please wait before refreshing again.')
       return
     }
@@ -584,8 +475,6 @@ export default function Dashboard() {
       }
 
       await supabase.from('businesses').update({ reviews_fetched_at: new Date().toISOString() }).eq('id', business.id)
-
-      // Full reload with fresh data
       await reloadDashboard(false)
     } catch (e: unknown) {
       setFetchError(e instanceof Error ? e.message : 'Failed to fetch reviews')
@@ -594,26 +483,19 @@ export default function Dashboard() {
     }
   }
 
-  // ── Category load / generate ─────────────────────────────────────────
-
   const loadCategories = async () => {
     if (!activeBusiness) return
 
-    // 1️⃣ Zustand store hit
     if (categoriesBusinessId === activeBusiness.id && categoriesLoadedAt !== null && categories.length > 0) {
-      console.log('[Dashboard] ✅ Categories Layer 1 hit — Zustand store')
       return
     }
 
-    // 2️⃣ localStorage hit
     const lsCats = lcLoad<Category[]>('categories', activeBusiness.id)
     if (lsCats && Array.isArray(lsCats.data) && lsCats.data.length > 0) {
-      console.log('[Dashboard] ✅ Categories Layer 2 hit — localStorage')
       setCategories(lsCats.data, activeBusiness.id)
       return
     }
 
-    // 3️⃣ Supabase
     setCatError('')
     try {
       const { data, error: dbErr } = await supabase
@@ -623,7 +505,6 @@ export default function Dashboard() {
         .order('review_count', { ascending: false })
       if (dbErr) throw dbErr
       if (data && data.length > 0) {
-        console.log('[Dashboard] ✅ Categories Layer 3 hit — Supabase')
         const mapped = data.map((row: Record<string, unknown>) => ({
           ...row,
           reviewIndices: (row.review_indices as number[]) ?? [],
@@ -653,13 +534,10 @@ export default function Dashboard() {
       }
 
       const newCats: Category[] = payload.categories
-      // Clear old localStorage before saving fresh
       lcClear('categories', activeBusiness.id)
       setCategories(newCats, activeBusiness.id)
       lcSave('categories', activeBusiness.id, newCats)
-      console.log('[Dashboard] ✅ Categories saved to localStorage + Zustand')
 
-      // Persist to Supabase — delete old, insert new
       await supabase.from('categories').delete().eq('business_id', activeBusiness.id)
       const rows = newCats.map(c => ({
         business_id:      activeBusiness.id,
@@ -682,24 +560,15 @@ export default function Dashboard() {
   // ── Render ─────────────────────────────────────────────────────────────
 
   if (initializing || loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="flex items-center gap-3 text-gray-500 text-sm">
-          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          Loading your dashboard…
-        </div>
-      </div>
-    )
+    return <DashboardSkeleton />
   }
 
   if (error) {
     return (
-      <div className="card p-6 text-red-400 text-sm flex items-center gap-3">
-        <span>⚠ {error}</span>
-        <button onClick={() => reloadDashboard()} className="underline hover:no-underline">Retry</button>
+      <div className="glass-card p-6 text-rose-600 text-sm flex items-center gap-3">
+        <AlertCircle size={16} className="flex-shrink-0" />
+        <span>{error}</span>
+        <button onClick={() => reloadDashboard()} className="underline hover:no-underline text-emerald-600">Retry</button>
       </div>
     )
   }
@@ -715,56 +584,58 @@ export default function Dashboard() {
   const reviewsStale = isStale(business?.reviews_fetched_at, 7)
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+      {/* ── Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-100 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-bold text-black/80 tracking-tight">
             {business?.name ?? 'Dashboard'}
           </h1>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
-            <span className="text-gray-500 text-sm">{business?.type} · {business?.location}</span>
+            <span className="text-black/40 text-sm">{business?.type} - {business?.location}</span>
             {business?.google_rating !== null && business?.google_rating !== undefined && (
               <span className="flex items-center gap-1 text-sm">
-                <span className="text-yellow-400">★</span>
-                <span className="font-semibold text-gray-200">{business.google_rating.toFixed(1)}</span>
-                <span className="text-gray-600 text-xs">Google</span>
+                <svg className="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                </svg>
+                <span className="font-semibold text-black/70">{business.google_rating.toFixed(1)}</span>
+                <span className="text-black/30 text-xs">Google</span>
               </span>
             )}
             {analysisLoading && (
-              <span className="text-purple-400 animate-pulse text-xs">· Analyzing…</span>
+              <span className="text-emerald-600 animate-pulse text-[11px] font-medium">Analyzing...</span>
             )}
           </div>
           <div className="flex items-center gap-3 mt-0.5 flex-wrap">
             {fromCache && !analysisLoading && (
-              <span className="text-[11px] text-emerald-600">✓ Loaded from cache</span>
+              <span className="text-[11px] text-emerald-600 font-medium">Loaded from cache</span>
             )}
             {fetchedAt && (
-              <p className="text-[11px] text-gray-600">{fromCache ? '·' : ''} Last updated: {fetchedAt}</p>
+              <p className="text-[11px] text-black/30">{fromCache ? '-' : ''} Last updated: {fetchedAt}</p>
             )}
             {analyzedAt && !analysisLoading && (
-              <p className="text-[11px] text-gray-600">· Analyzed: {analyzedAt}</p>
+              <p className="text-[11px] text-black/30">- Analyzed: {analyzedAt}</p>
             )}
           </div>
         </div>
+
         <div className="flex items-center gap-2 flex-wrap shrink-0">
           {business?.place_id && (
             <button
               onClick={fetchNewReviews}
               disabled={fetchingReviews || analysisLoading}
               title="Fetch latest reviews from Google"
-              className="min-h-[44px] px-3 py-2 text-xs text-blue-400 border border-blue-500/30 hover:bg-blue-500/10 rounded-lg transition-all disabled:opacity-40 flex items-center gap-1.5"
+              className="min-h-[40px] px-3 py-2 text-xs text-black/50 border border-black/10 hover:bg-black/[0.03] hover:border-black/20 rounded-xl transition-all disabled:opacity-40 flex items-center gap-1.5 font-medium"
             >
               {fetchingReviews ? (
+                <><div className="w-3 h-3 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" /> Fetching...</>
+              ) : (
                 <>
-                  <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Fetching…
+                  <Download size={14} />
+                  Fetch Reviews
                 </>
-              ) : '↓ Fetch Reviews'}
+              )}
             </button>
           )}
           {hasAnalysis && (
@@ -772,118 +643,160 @@ export default function Dashboard() {
               onClick={() => reloadDashboard(true)}
               disabled={analysisLoading || fetchingReviews}
               title="Force re-analysis with Anthropic AI"
-              className="min-h-[44px] px-3 py-2 text-xs text-purple-400 border border-purple-500/30 hover:bg-purple-500/10 rounded-lg transition-all disabled:opacity-40"
+              className="min-h-[40px] px-3 py-2 text-xs text-emerald-600 border border-emerald-200 hover:bg-emerald-50 rounded-xl transition-all disabled:opacity-40 font-medium flex items-center gap-1.5"
             >
-              ✨ Re-analyze
+              <Lightbulb size={14} />
+              Re-analyze
             </button>
           )}
           <button
             onClick={() => reloadDashboard(false)}
             disabled={loading || analysisLoading || fetchingReviews}
-            className="btn-primary min-h-[44px] px-4 py-2 text-xs flex items-center gap-1.5"
+            className="btn-primary min-h-[40px] px-4 py-2 text-sm flex items-center gap-1.5"
           >
-            ↻ Refresh
+            <RefreshCw size={14} />
+            Refresh
           </button>
         </div>
       </div>
 
-      {/* Stale reviews banner */}
+      {/* ── Stale reviews banner ── */}
       {reviewsStale && business?.place_id && !fetchingReviews && (
-        <div className="card p-3 border-amber-500/20 flex items-center justify-between gap-3">
-          <span className="text-amber-400 text-xs">
-            ⚠ Your reviews are {fetchedAt ? 'over 7 days old' : 'not yet fetched from Google'}.
-          </span>
-          <button onClick={fetchNewReviews} className="text-xs text-amber-400 underline hover:no-underline">
+        <div className="rounded-xl p-3 bg-amber-50 border border-amber-200 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} className="text-amber-600 flex-shrink-0" />
+            <span className="text-amber-700 text-xs font-medium">
+              {fetchedAt ? 'Reviews are over 7 days old.' : 'Reviews not yet fetched from Google.'}
+            </span>
+          </div>
+          <button onClick={fetchNewReviews} className="text-xs text-amber-600 font-semibold hover:text-amber-500">
             Fetch now
           </button>
         </div>
       )}
 
-      {/* Fetch result banner */}
+      {/* ── Fetch result banner ── */}
       {fetchedCount !== null && !fetchError && (
-        <div className={`card p-3 flex items-center justify-between gap-3 ${fetchedCount === 0 ? 'border-red-500/30' : 'border-emerald-500/30'}`}>
-          <span className={`text-xs ${fetchedCount === 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+        <div className={`rounded-xl p-3 flex items-center justify-between gap-3 ${fetchedCount === 0 ? 'bg-rose-50 border border-rose-200' : 'bg-emerald-50 border border-emerald-200'}`}>
+          <span className={`text-xs font-medium ${fetchedCount === 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
             {fetchedCount === 0
-              ? '⚠ Outscraper returned 0 reviews — the fetch failed or this business has no reviews yet'
-              : <>✓ Fetched <strong>{fetchedCount}</strong> reviews from Outscraper{fetchedCount < 200 && <span className="text-gray-500"> (Outscraper cap for this business)</span>}</>
+              ? 'Outscraper returned 0 reviews - the fetch failed or this business has no reviews yet'
+              : <>Fetched <strong>{fetchedCount}</strong> reviews from Google{fetchedCount < 200 && <span className="text-black/30 font-normal"> (reached Outscraper cap)</span>}</>
             }
           </span>
-          <button onClick={() => setFetchedCount(null)} className="text-xs text-gray-500 hover:text-gray-400">✕</button>
+          <button onClick={() => setFetchedCount(null)} className="text-xs text-black/30 hover:text-black/50">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
       )}
 
-      {/* Fetch error banner */}
+      {/* ── Fetch error banner ── */}
       {fetchError && (
-        <div className="card p-3 border-red-500/30 flex items-center gap-3">
-          <span className="text-red-400 text-xs">⚠ Fetch error: {fetchError}</span>
-          <button onClick={() => setFetchError('')} className="text-xs text-red-400 underline hover:no-underline">Dismiss</button>
+        <div className="rounded-xl p-3 bg-rose-50 border border-rose-200 flex items-center gap-3">
+          <AlertCircle size={16} className="text-rose-600 flex-shrink-0" />
+          <span className="text-rose-700 text-xs font-medium flex-1">{fetchError}</span>
+          <button onClick={() => setFetchError('')} className="text-xs text-rose-600 font-semibold hover:text-rose-500">Dismiss</button>
         </div>
       )}
 
-      {/* Analysis error banner */}
+      {/* ── Analysis error banner ── */}
       {analysisError && (
-        <div className="card p-3 border-amber-500/30 flex items-center gap-3">
-          <span className="text-amber-400 text-xs">⚠ Analysis error: {analysisError}</span>
+        <div className="rounded-xl p-3 bg-amber-50 border border-amber-200 flex items-center gap-3">
+          <AlertCircle size={16} className="text-amber-600 flex-shrink-0" />
+          <span className="text-amber-700 text-xs font-medium flex-1">Analysis error: {analysisError}</span>
           <button
             onClick={() => business && runAnalysis(reviews, business.id, reviews)}
-            className="text-xs text-amber-400 underline hover:no-underline"
+            className="text-xs text-amber-600 font-semibold hover:text-amber-500"
           >
             Retry
           </button>
         </div>
       )}
 
-      {/* Stats row */}
+      {/* ── Stats row ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <StatCard icon="📝" value={reviews.length}
-          label="Total Reviews" glow="bg-blue-400"
-          sub={business?.google_rating ? `${business.google_rating.toFixed(1)}★ Google rating` : undefined}
+        <StatCard
+          icon={<FileText size={18} className="text-sky-600" />}
+          value={reviews.length}
+          label="Total Reviews"
+          colorClass="text-[#0284C7]"
+          barClass="bg-blue-400/60"
+          iconBg="bg-sky-50"
+          sub={business?.google_rating ? `${business.google_rating.toFixed(1)} Google rating` : undefined}
         />
-        <StatCard icon="😊" value={`${positivePercent}%`}   label="Positive"         color="text-emerald-400" glow="bg-emerald-400" sub={`${sc.positive} reviews`} />
-        <StatCard icon="😞" value={`${negativePercent}%`}   label="Negative"         color="text-red-400"     glow="bg-red-400"     sub={`${sc.negative} reviews`} />
-        <StatCard icon="🏆" value={reputationScore}          label="Reputation Score" color="text-purple-400"  glow="bg-purple-400"  sub="Out of 100" />
+        <StatCard
+          icon={<Smile size={18} className="text-emerald-600" />}
+          value={`${positivePercent}%`}
+          label="Positive"
+          colorClass="text-[#059669]"
+          barClass="bg-emerald-400/60"
+          iconBg="bg-emerald-50"
+          sub={`${sc.positive} reviews`}
+        />
+        <StatCard
+          icon={<Frown size={18} className="text-rose-600" />}
+          value={`${negativePercent}%`}
+          label="Negative"
+          colorClass="text-[#E11D48]"
+          barClass="bg-rose-400/60"
+          iconBg="bg-rose-50"
+          sub={`${sc.negative} reviews`}
+        />
+        <StatCard
+          icon={<Award size={18} className="text-teal-600" />}
+          value={reputationScore}
+          label="Reputation Score"
+          colorClass="text-[#0F766E]"
+          barClass="bg-teal-400/60"
+          iconBg="bg-teal-50"
+          sub="Out of 100"
+        />
       </div>
 
-      {/* Action Items */}
+      {/* ── Action Items ── */}
       {hasAnalysis && (() => {
-        const urgentNeg = reviews.filter(r => r.sentiment === 'negative' && (r.rating === null || r.rating <= 2))
         const unanswered = reviews.filter(r => r.sentiment === 'negative')
         const weakCat   = categories.find(c => c.verdict === 'Critical Issue')
         const starCat   = categories.find(c => c.verdict === 'Strength')
-        const items: { icon: string; color: string; bg: string; border: string; title: string; desc: string; action?: string; page?: string; reviewText?: string }[] = []
+        const items: { icon: React.ReactNode; colorText: string; bg: string; border: string; title: string; desc: string; action?: string; page?: string; reviewText?: string }[] = []
 
         if (unanswered.length > 0) {
           items.push({
-            icon: '⚠️', color: 'text-red-300', bg: 'bg-red-500/8', border: 'border-red-500/25',
+            icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>,
+            colorText: 'text-rose-700', bg: 'bg-rose-50', border: 'border-rose-200',
             title: `${unanswered.length} negative review${unanswered.length > 1 ? 's' : ''} need a response`,
-            desc:  'Responding to negative reviews publicly shows you care and can recover trust.',
+            desc:  'Responding publicly shows you care and can recover customer trust.',
             action: 'Respond now', page: 'responder', reviewText: unanswered[0]?.review_text,
           })
         }
         if (weakCat) {
           items.push({
-            icon: '🔧', color: 'text-amber-300', bg: 'bg-amber-500/8', border: 'border-amber-500/25',
+            icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
+            colorText: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200',
             title: `"${weakCat.name}" is a critical weakness`,
             desc:  `${weakCat.review_count} reviews mention this area negatively. Address it to boost your score.`,
           })
         }
         if (starCat) {
           items.push({
-            icon: '🌟', color: 'text-emerald-300', bg: 'bg-emerald-500/8', border: 'border-emerald-500/25',
+            icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>,
+            colorText: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200',
             title: `Customers love your "${starCat.name}"`,
             desc:  'Highlight this strength in your marketing to attract more customers.',
           })
         }
-        if (urgentNeg.length === 0 && !weakCat && !starCat) return null
+        if (items.length === 0) return null
         return (
-          <div className="space-y-2">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider px-1">Action Items</h3>
+          <div className="glass-card p-5 space-y-3">
+            <SectionLabel title="Action Items" />
             {items.map((item, i) => (
-              <div key={i} className={`flex items-start gap-3 rounded-xl border ${item.bg} ${item.border} px-4 py-3`}>
-                <span className="text-lg mt-0.5 shrink-0">{item.icon}</span>
+              <div key={i} className={`glass-card-inner flex items-start gap-3 px-4 py-3 ${item.bg} border ${item.border}`}>
+                <div className={`mt-0.5 shrink-0 ${item.colorText}`}>{item.icon}</div>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold ${item.color}`}>{item.title}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{item.desc}</p>
+                  <p className={`text-sm font-semibold ${item.colorText}`}>{item.title}</p>
+                  <p className="text-xs text-black/45 mt-0.5">{item.desc}</p>
                 </div>
                 {item.action && item.page && (
                   <button
@@ -891,9 +804,9 @@ export default function Dashboard() {
                       if (item.reviewText) setPendingReviewText(item.reviewText)
                       setPendingNavPage(item.page as string)
                     }}
-                    className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border ${item.border} ${item.color} hover:bg-white/5 transition-colors`}
+                    className="shrink-0 btn-primary text-xs px-3 py-1"
                   >
-                    {item.action} →
+                    {item.action}
                   </button>
                 )}
               </div>
@@ -902,74 +815,96 @@ export default function Dashboard() {
         )
       })()}
 
-      {/* Gauge + Chart */}
+      {/* ── First-run analysis banner ── */}
+      {analysisLoading && !hasAnalysis && (
+        <div className="rounded-xl p-4 flex items-center gap-3 bg-emerald-50 border border-emerald-200">
+          <div className="w-4 h-4 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin flex-shrink-0" />
+          <p className="text-sm text-emerald-700 font-medium">Analyzing your reviews with AI... this takes a few seconds.</p>
+        </div>
+      )}
+
+      {/* ── Gauge + Chart ── */}
       {hasAnalysis && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="rounded-xl border border-[#1e2d4a] bg-gradient-to-br from-[#0f1629] to-[#0a0f1e] p-6">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-0.5">Overall Score</h3>
-            <p className="text-xs text-gray-600 mb-4">Calculated from {reviews.length} reviews</p>
-            <ReputationGauge score={reputationScore} />
+        <div className="grid grid-cols-1 lg:grid-cols-[55fr_45fr] gap-4">
+          {/* Overall Score */}
+          <div className="glass-card p-6 flex flex-col">
+            <div className="mb-2">
+              <span className="inline-block text-[11px] font-semibold uppercase tracking-[0.1em] bg-black/[0.04] text-black/40 px-3 py-[5px] rounded-[10px]">
+                Overall Score
+              </span>
+            </div>
+            <div className="flex-1 flex items-center justify-center">
+              <ReputationGauge score={reputationScore} reviewCount={reviews.length} />
+            </div>
           </div>
-          <div className="rounded-xl border border-[#1e2d4a] bg-gradient-to-br from-[#0f1629] to-[#0a0f1e] p-6">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-0.5">Sentiment Trend</h3>
-            <p className="text-xs text-gray-600 mb-4">Positive vs negative across your reviews</p>
+
+          {/* Sentiment Trend */}
+          <div className="glass-card p-6 flex flex-col">
+            <div className="mb-4">
+              <span className="inline-block text-[11px] font-semibold uppercase tracking-[0.1em] bg-black/[0.04] text-black/40 px-3 py-[5px] rounded-[10px]">
+                Sentiment Trend
+              </span>
+              <span className="ml-2 text-[11px] text-black/30">Positive vs negative over time</span>
+            </div>
             {timeline.length > 1 ? (
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={timeline} margin={{ top: 5, right: 10, bottom: 5, left: -20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e2d4a" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fill: '#9ca3af', fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <YAxis domain={[0, 100]} tick={{ fill: '#9ca3af', fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={v => `${v}%`} />
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={timeline} margin={{ top: 8, right: 8, bottom: 4, left: -16 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fill: 'rgba(0,0,0,0.2)', fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    domain={[0, 100]}
+                    ticks={[0, 25, 50, 75, 100]}
+                    tick={{ fill: 'rgba(0,0,0,0.2)', fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v: number) => `${v}%`}
+                  />
                   <Tooltip content={<CustomTooltip />} />
-                  <Line type="monotone" dataKey="positive" name="Positive" stroke="#10b981" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="negative" name="Negative" stroke="#ef4444" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="positive" name="Positive" stroke="#059669" strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: '#059669' }} />
+                  <Line type="monotone" dataKey="negative" name="Negative" stroke="#E11D48" strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: '#E11D48' }} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <p className="text-xs text-gray-600 text-center py-8">Add more reviews for a trend chart.</p>
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-xs text-black/30 text-center py-8">Add more reviews to see a trend chart.</p>
+              </div>
             )}
           </div>
         </div>
       )}
 
-      {/* First-run analysis banner */}
-      {analysisLoading && !hasAnalysis && (
-        <div className="card p-4 flex items-center gap-3 border-purple-500/20">
-          <svg className="animate-spin h-4 w-4 text-purple-400 flex-shrink-0" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          <p className="text-sm text-purple-300">Analyzing your reviews with AI… this takes a few seconds.</p>
-        </div>
-      )}
-
-      {/* Keywords */}
+      {/* ── Keywords ── */}
       {keywords.length > 0 && (() => {
-        // Parse "word×12" format or just plain words
         const parsed: KeywordEntry[] = keywords.map((kw, i) => {
-          const m = kw.match(/^(.+?)[\s×x*](\d+)$/)
+          const m = kw.match(/^(.+?)[\s\u00d7x*](\d+)$/)
           return m ? { word: m[1].trim(), count: parseInt(m[2]) } : { word: kw, count: keywords.length - i }
         })
         const maxCount = Math.max(...parsed.map(k => k.count), 1)
         return (
-          <div className="rounded-xl border border-[#1e2d4a] bg-gradient-to-br from-[#0f1629] to-[#0a0f1e] p-6">
-            <h3 className="text-sm font-bold text-gray-100 mb-4 uppercase tracking-wider">Most Mentioned Keywords</h3>
+          <div className="glass-card p-6">
+            <SectionLabel title="Most Mentioned Keywords" className="mb-4" />
+
             <div className="flex flex-wrap gap-2 items-end">
               {parsed.map((kw, i) => {
                 const ratio = kw.count / maxCount
-                const fontSize = ratio > 0.75 ? 'text-base' : ratio > 0.5 ? 'text-sm' : ratio > 0.25 ? 'text-xs' : 'text-[11px]'
-                const padding  = ratio > 0.75 ? 'px-4 py-2' : ratio > 0.5 ? 'px-3 py-1.5' : 'px-2.5 py-1'
-                // Color: first third = green (positive keywords), last third = red, middle = purple
+                const fontSize = ratio > 0.75 ? 'text-sm' : ratio > 0.5 ? 'text-xs' : 'text-[11px]'
+                const padding  = ratio > 0.75 ? 'px-3.5 py-1.5' : ratio > 0.5 ? 'px-3 py-1' : 'px-2.5 py-1'
                 const colorClass = i < Math.floor(parsed.length / 3)
-                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25 hover:bg-emerald-500/25'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                   : i >= Math.ceil(parsed.length * 2 / 3)
-                  ? 'bg-red-500/15 text-red-300 border-red-500/25 hover:bg-red-500/25'
-                  : 'bg-purple-500/15 text-purple-300 border-purple-500/25 hover:bg-purple-500/25'
+                  ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100'
+                  : 'bg-black/[0.04] text-black/50 border-black/10 hover:bg-black/[0.06]'
                 return (
                   <span key={kw.word}
                     className={`inline-flex items-center gap-1 rounded-full border font-medium transition-colors cursor-default ${fontSize} ${padding} ${colorClass}`}
                   >
                     {kw.word}
-                    <span className="opacity-60 text-[9px] font-normal">×{kw.count}</span>
+                    <span className="opacity-60 text-[11px] font-normal">x{kw.count}</span>
                   </span>
                 )
               })}
@@ -978,71 +913,62 @@ export default function Dashboard() {
         )
       })()}
 
-      {/* ── Category Summary ─────────────────────────────────── */}
+      {/* ── Category Summary ── */}
       {reviews.length > 0 && (
-        <div className="rounded-xl border border-[#1e2d4a] bg-gradient-to-br from-[#0f1629] to-[#0a0f1e] overflow-hidden">
+        <div className="glass-card overflow-hidden">
 
           {/* Header */}
-          <div className="px-6 py-4 border-b border-[#1e2d4a] flex items-center justify-between gap-3">
+          <div className="px-6 py-4 border-b border-black/5 flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Review Categories</h3>
-              {categories.length > 0 && (
-                <p className="text-[11px] text-gray-600 mt-0.5">AI-detected themes · click a tab to explore</p>
-              )}
+              <SectionLabel
+                title="Review Categories"
+                sub={categories.length > 0 ? 'AI-detected themes · click a tab to explore' : undefined}
+              />
             </div>
             <button
               data-generate-categories
               onClick={generateCategories}
               disabled={catLoading || reviews.length === 0}
-              className="min-h-[36px] px-3 py-1.5 text-xs text-purple-400 border border-purple-500/30 hover:bg-purple-500/10 rounded-lg transition-all disabled:opacity-40 flex items-center gap-1.5 shrink-0"
+              className="min-h-[36px] px-3 py-1.5 text-xs text-emerald-600 border border-emerald-200 hover:bg-emerald-50 rounded-xl transition-all disabled:opacity-40 flex items-center gap-1.5 font-medium shrink-0"
             >
               {catLoading ? (
-                <>
-                  <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Analyzing…
-                </>
+                <><div className="w-3 h-3 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" /> Analyzing...</>
               ) : (
-                <>✨ {categories.length > 0 ? 'Refresh' : 'Generate'} Categories</>
+                <>
+                  <Lightbulb size={14} />
+                  {categories.length > 0 ? 'Refresh' : 'Generate'} Categories
+                </>
               )}
             </button>
           </div>
 
           {catError && (
-            <div className="px-6 py-3 bg-red-500/10 border-b border-red-500/20">
-              <p className="text-xs text-red-400">⚠ {catError}</p>
+            <div className="px-6 py-3 bg-rose-50 border-b border-rose-200">
+              <p className="text-xs text-rose-700 font-medium">{catError}</p>
             </div>
           )}
 
           {!catError && categories.length > 0 && categories.every(c => !Array.isArray(c.reviewIndices) || c.reviewIndices.length === 0) && (
-            <div className="px-6 py-2.5 bg-amber-500/8 border-b border-amber-500/20 flex items-center justify-between gap-3">
-              <p className="text-[11px] text-amber-400/80">Categories need regenerating to show accurate review counts.</p>
+            <div className="px-6 py-2.5 bg-amber-50 border-b border-amber-200 flex items-center justify-between gap-3">
+              <p className="text-[11px] text-amber-700 font-medium">Categories need regenerating to show accurate review counts.</p>
               <button
                 onClick={() => document.querySelector<HTMLButtonElement>('[data-generate-categories]')?.click()}
-                className="text-[11px] text-amber-400 hover:text-amber-300 underline underline-offset-2 shrink-0"
+                className="text-[11px] text-amber-600 hover:text-amber-500 font-semibold shrink-0"
               >Refresh now</button>
             </div>
           )}
 
           {categories.length > 0 ? (() => {
-            // Build the exact review list for every category using reviewIndices (the source of truth).
-            // Falls back to full text matching only when no indices exist (old cached data).
             const getCatReviews = (cat: Category): Review[] => {
               if (Array.isArray(cat.reviewIndices) && cat.reviewIndices.length > 0) {
                 return cat.reviewIndices.map(i => reviews[i]).filter((r): r is Review => r !== undefined)
               }
-              // Stale cached categories (no reviewIndices) — show all reviews
-              // so the list isn't misleadingly short. User can regenerate to get proper scoping.
               return reviews
             }
-
 
             const activeCat = categories.find(c => c.name === activeCategory) ?? null
             const catLabel = activeCat ? activeCat.name : 'All Reviews'
 
-            // ── Filter + sort pipeline ──
             let catReviewList: Review[] = activeCat ? getCatReviews(activeCat) : reviews
 
             if (catSentiment !== 'all')
@@ -1096,10 +1022,7 @@ export default function Dashboard() {
             return (
               <>
                 {/* ── Tab strip ── */}
-                <div
-                  className="flex gap-2 px-4 py-3 overflow-x-auto border-b border-[#1e2d4a]"
-                  style={{ scrollbarWidth: 'thin', scrollbarColor: '#7c3aed #1e2030' }}
-                >
+                <div className="flex gap-2 px-4 py-3 overflow-x-auto border-b border-black/5 scrollbar-none">
                   {/* All Reviews tab */}
                   {(() => {
                     const isActive = !activeCategory
@@ -1108,17 +1031,18 @@ export default function Dashboard() {
                         onClick={() => { setActiveCategory(null); setCatVisibleCount(10); setCatSearch(''); setCatSentiment('all'); setCatDate('all'); setCatRating('all'); setCatSort('newest') }}
                         className={`group flex-shrink-0 rounded-xl border px-3 py-2.5 text-left transition-all duration-200 w-[140px] ${
                           isActive
-                            ? 'border-purple-500/50 bg-purple-500/10 shadow-[0_0_12px_rgba(168,85,247,0.15)]'
-                            : 'border-[#1e2d4a] bg-[#080d1a] hover:border-purple-500/30 hover:bg-[#0d1425]'
+                            ? 'border-emerald-300 bg-emerald-50 shadow-glass-sm'
+                            : 'border-black/[0.07] bg-white/50 hover:border-black/[0.12] hover:bg-white/70'
                         }`}
                       >
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="text-base">📋</span>
-                          <span className={`text-[10px] font-bold uppercase tracking-wide ${isActive ? 'text-purple-300' : 'text-gray-500'}`}>All</span>
+                        <div className="flex items-center gap-2 mb-2">
+                          <svg className="w-4 h-4 text-black/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                          </svg>
+                          <span className="text-[10px] font-bold uppercase tracking-wide text-black/40">All</span>
                         </div>
-                        <div className={`text-xs font-semibold leading-snug ${isActive ? 'text-purple-100' : 'text-gray-300'}`}>All Reviews</div>
-                        <div className={`text-[10px] mt-1 ${isActive ? 'text-purple-400' : 'text-gray-600'}`}>{reviews.length} reviews</div>
-                        {/* Quote placeholder — consistent height */}
+                        <div className="text-xs font-semibold leading-snug text-black/70">All Reviews</div>
+                        <div className="text-[11px] mt-1 text-black/40 font-medium">{reviews.length} reviews</div>
                         <div className="mt-1.5 h-[28px]" />
                       </button>
                     )
@@ -1131,7 +1055,6 @@ export default function Dashboard() {
                     const scorePercent = Math.round(((cat.sentiment_score + 1) / 2) * 100)
                     const catReviews = getCatReviews(cat)
                     const actualCount = catReviews.length
-                    // Pick the first snippet as a one-liner quote
                     const quote = cat.example_snippets?.[0]?.slice(0, 55) ?? ''
 
                     return (
@@ -1140,34 +1063,34 @@ export default function Dashboard() {
                         onClick={() => { setActiveCategory(cat.name); setCatVisibleCount(10); setCatSearch(''); setCatSentiment('all'); setCatDate('all'); setCatRating('all'); setCatSort('newest') }}
                         className={`group flex-shrink-0 rounded-xl border px-3 py-2.5 text-left transition-all duration-200 w-[175px] ${
                           isActive
-                            ? 'border-purple-500/50 bg-purple-500/10 shadow-[0_0_12px_rgba(168,85,247,0.15)]'
-                            : 'border-[#1e2d4a] bg-[#080d1a] hover:border-purple-500/30 hover:bg-[#0d1425]'
+                            ? `${cfg.border} ${cfg.bg} shadow-glass-sm`
+                            : 'border-black/[0.07] bg-white/50 hover:border-black/[0.12] hover:bg-white/70'
                         }`}
                       >
-                        {/* Top row: emoji + verdict badge */}
-                        <div className="flex items-center justify-between mb-1.5">
+                        {/* Top row: emoji + verdict */}
+                        <div className="flex items-center justify-between mb-2">
                           <span className="text-base">{cat.emoji}</span>
-                          <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${cfg.badge}`}>{cat.verdict}</span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${cfg.badge}`}>{cat.verdict}</span>
                         </div>
                         {/* Name */}
-                        <div className={`text-xs font-semibold leading-snug line-clamp-1 ${isActive ? 'text-purple-100' : 'text-gray-300'}`}>{cat.name}</div>
+                        <div className="text-xs font-semibold leading-snug line-clamp-1 text-black/70">{cat.name}</div>
                         {/* Count + sentiment bar */}
-                        <div className="flex items-center gap-2 mt-1.5">
-                          <div className="flex-1 h-0.5 bg-[#1e2d4a] rounded-full overflow-hidden">
+                        <div className="flex items-center gap-2 mt-2">
+                          <div className="flex-1 h-1 bg-black/[0.06] rounded-full overflow-hidden">
                             <div
                               className={`h-full rounded-full transition-all ${
                                 cat.verdict === 'Strength' ? 'bg-emerald-400' :
-                                cat.verdict === 'Critical Issue' ? 'bg-red-400' : 'bg-amber-400'
+                                cat.verdict === 'Critical Issue' ? 'bg-rose-400' : 'bg-amber-400'
                               }`}
                               style={{ width: `${scorePercent}%` }}
                             />
                           </div>
-                          <span className={`text-[10px] shrink-0 ${isActive ? 'text-purple-300' : 'text-gray-500'}`}>{actualCount}</span>
+                          <span className="text-[11px] text-black/40 shrink-0 font-medium">{actualCount}</span>
                         </div>
                         {/* One-liner quote */}
                         {quote ? (
-                          <p className="mt-1.5 text-[9px] text-gray-600 italic leading-snug line-clamp-2 h-[28px]">
-                            "{quote}{quote.length >= 55 ? '…' : ''}"
+                          <p className="mt-1.5 text-[11px] text-black/35 italic leading-snug line-clamp-2 h-[28px]">
+                            &ldquo;{quote}{quote.length >= 55 ? '...' : ''}&rdquo;
                           </p>
                         ) : (
                           <div className="mt-1.5 h-[28px]" />
@@ -1178,72 +1101,75 @@ export default function Dashboard() {
                 </div>
 
                 {/* ── Filter bar ── */}
-                <div className="px-4 py-3 border-b border-[#1e2d4a] bg-[#080d1a]/80 backdrop-blur-sm flex flex-wrap gap-2 items-center sticky top-0 z-10">
+                <div className="px-4 py-2.5 border-b border-black/5 bg-white/30 backdrop-blur-sm flex items-center gap-2 sticky top-0 z-10">
                   {/* Sentiment pills */}
                   <div className="flex gap-1 shrink-0">
-                    {(['all', 'positive', 'negative', 'neutral'] as const).map(s => (
-                      <button key={s} onClick={() => { setCatSentiment(s); setCatVisibleCount(10) }}
-                        className={`px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide transition-all ${
-                          catSentiment === s
-                            ? s === 'positive' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                            : s === 'negative' ? 'bg-red-500/20 text-red-300 border border-red-500/40'
-                            : s === 'neutral'  ? 'bg-gray-500/20 text-gray-300 border border-gray-500/40'
-                            : 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                            : 'bg-transparent text-gray-600 border border-[#1e2d4a] hover:border-gray-500/40 hover:text-gray-400'
+                    {([
+                      { v: 'all',      label: 'All' },
+                      { v: 'positive', label: '+ Pos' },
+                      { v: 'negative', label: '- Neg' },
+                      { v: 'neutral',  label: '~ Neu' },
+                    ] as const).map(({ v, label }) => (
+                      <button key={v} onClick={() => { setCatSentiment(v); setCatVisibleCount(10) }}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold tracking-wide transition-all whitespace-nowrap ${
+                          catSentiment === v
+                            ? v === 'positive' ? 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200'
+                            : v === 'negative' ? 'bg-rose-50 text-rose-600 ring-1 ring-rose-200'
+                            : v === 'neutral'  ? 'bg-black/[0.04] text-black/50 ring-1 ring-black/10'
+                            : 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200'
+                            : 'text-black/35 hover:text-black/50 hover:bg-black/[0.03]'
                         }`}>
-                        {s === 'all' ? 'All' : s}
+                        {label}
                       </button>
                     ))}
                   </div>
 
-                  <div className="w-px h-5 bg-[#1e2d4a] shrink-0" />
+                  <div className="w-px h-4 bg-black/10 shrink-0" />
 
-                  {/* Date dropdown */}
+                  {/* Compact dropdowns */}
                   <select value={catDate} onChange={e => { setCatDate(e.target.value as typeof catDate); setCatVisibleCount(10) }}
-                    className="bg-[#0d1425] border border-[#1e2d4a] text-gray-400 text-[11px] rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-purple-500/50 cursor-pointer hover:border-gray-500/40 transition-colors">
+                    className={`text-[11px] font-medium rounded-lg px-2 py-1 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-400/30 ${catDate !== 'all' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white/50 border-black/10 text-black/60 hover:bg-white/70'}`}>
                     <option value="all">All time</option>
-                    <option value="7d">Last 7 days</option>
-                    <option value="30d">Last 30 days</option>
-                    <option value="3m">Last 3 months</option>
-                    <option value="6m">Last 6 months</option>
-                    <option value="1y">Last year</option>
+                    <option value="7d">7 days</option>
+                    <option value="30d">30 days</option>
+                    <option value="3m">3 months</option>
+                    <option value="6m">6 months</option>
+                    <option value="1y">1 year</option>
                   </select>
 
-                  {/* Rating dropdown */}
                   <select value={catRating} onChange={e => { setCatRating(e.target.value as typeof catRating); setCatVisibleCount(10) }}
-                    className="bg-[#0d1425] border border-[#1e2d4a] text-gray-400 text-[11px] rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-purple-500/50 cursor-pointer hover:border-gray-500/40 transition-colors">
+                    className={`text-[11px] font-medium rounded-lg px-2 py-1 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-400/30 ${catRating !== 'all' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white/50 border-black/10 text-black/60 hover:bg-white/70'}`}>
                     <option value="all">All stars</option>
-                    <option value="5">⭐⭐⭐⭐⭐ 5 stars</option>
-                    <option value="4">⭐⭐⭐⭐ 4 stars</option>
-                    <option value="3">⭐⭐⭐ 3 stars</option>
-                    <option value="12">⭐⭐ 1–2 stars</option>
+                    <option value="5">5 stars</option>
+                    <option value="4">4 stars</option>
+                    <option value="3">3 stars</option>
+                    <option value="12">1-2 stars</option>
                   </select>
 
-                  {/* Sort dropdown */}
                   <select value={catSort} onChange={e => { setCatSort(e.target.value as typeof catSort); setCatVisibleCount(10) }}
-                    className="bg-[#0d1425] border border-[#1e2d4a] text-gray-400 text-[11px] rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-purple-500/50 cursor-pointer hover:border-gray-500/40 transition-colors">
-                    <option value="newest">Newest first</option>
-                    <option value="oldest">Oldest first</option>
-                    <option value="highest">Highest rated</option>
-                    <option value="lowest">Lowest rated</option>
+                    className={`text-[11px] font-medium rounded-lg px-2 py-1 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-400/30 ${catSort !== 'newest' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white/50 border-black/10 text-black/60 hover:bg-white/70'}`}>
+                    <option value="newest">Newest</option>
+                    <option value="oldest">Oldest</option>
+                    <option value="highest">Top rated</option>
+                    <option value="lowest">Low rated</option>
                   </select>
 
-                  {/* Search input */}
-                  <div className="relative flex-1 min-w-[140px]">
-                    <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
+                  {/* Search */}
+                  <div className="relative flex-1 min-w-0">
+                    <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-black/25 pointer-events-none" />
                     <input type="text" value={catSearch} onChange={e => { setCatSearch(e.target.value); setCatVisibleCount(10) }}
-                      placeholder="Search reviews..."
-                      className="w-full bg-[#0d1425] border border-[#1e2d4a] text-gray-300 text-[11px] rounded-lg pl-7 pr-3 py-1.5 placeholder-gray-600 focus:outline-none focus:border-purple-500/50 hover:border-gray-500/40 transition-colors" />
+                      placeholder="Search..."
+                      className="w-full bg-white/50 border border-black/10 hover:bg-white/70 text-black/60 text-[11px] rounded-lg pl-6 pr-3 py-1 placeholder-black/25 focus:outline-none focus:ring-1 focus:ring-emerald-400/30 focus:border-emerald-300 transition-all font-medium" />
                   </div>
 
-                  {/* Active filter count badge + Clear */}
+                  {/* Clear badge */}
                   {activeFilterCount > 0 && (
                     <button onClick={clearAllFilters}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-400 text-[10px] font-medium hover:bg-purple-500/20 transition-colors shrink-0">
-                      <span className="w-4 h-4 rounded-full bg-purple-500 text-white text-[9px] font-bold flex items-center justify-center">{activeFilterCount}</span>
-                      Clear filters
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500 text-white text-[11px] font-bold hover:opacity-90 transition-colors shrink-0">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      {activeFilterCount}
                     </button>
                   )}
                 </div>
@@ -1251,57 +1177,59 @@ export default function Dashboard() {
                 {/* ── Review list ── */}
                 <div>
                   {/* Count label */}
-                  <div className="px-5 py-2.5 flex items-center justify-between border-b border-[#1e2d4a]/50">
-                    <p className="text-[11px] text-gray-500">
-                      Showing <span className="text-gray-400 font-medium">{Math.min(catVisibleCount, catReviewList.length)}</span> of{' '}
-                      <span className="text-gray-400 font-medium">{catReviewList.length}</span> review{catReviewList.length !== 1 ? 's' : ''}
-                      {activeCat && <span className="text-gray-600"> in {catLabel}</span>}
-                      {activeFilterCount > 0 && <span className="text-purple-500/70"> · {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''} active</span>}
+                  <div className="px-5 py-2.5 flex items-center justify-between border-b border-black/5">
+                    <p className="text-[11px] text-black/35">
+                      Showing <span className="text-black/50 font-medium">{Math.min(catVisibleCount, catReviewList.length)}</span> of{' '}
+                      <span className="text-black/50 font-medium">{catReviewList.length}</span> review{catReviewList.length !== 1 ? 's' : ''}
+                      {activeCat && <span className="text-black/30"> in {catLabel}</span>}
+                      {activeFilterCount > 0 && <span className="text-emerald-600"> - {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''} active</span>}
                     </p>
                     {activeCat && (
                       <button
                         onClick={() => { setActiveCategory(null); setCatVisibleCount(10); clearAllFilters() }}
-                        className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
+                        className="text-[11px] text-black/30 hover:text-black/50 transition-colors"
                       >
-                        ✕ Clear
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                       </button>
                     )}
                   </div>
 
                   {catReviewList.length === 0 ? (
                     <div className="px-6 py-10 text-center space-y-2">
-                      <p className="text-sm text-gray-500">{activeFilterCount > 0 ? 'No reviews match your filters.' : 'No reviews in this category.'}</p>
+                      <p className="text-sm text-black/40">{activeFilterCount > 0 ? 'No reviews match your filters.' : 'No reviews in this category.'}</p>
                       {activeFilterCount > 0 && (
-                        <button onClick={clearAllFilters} className="text-xs text-purple-400 hover:text-purple-300 underline">Clear filters</button>
+                        <button onClick={clearAllFilters} className="text-xs text-emerald-600 hover:text-emerald-500 underline">Clear filters</button>
                       )}
                     </div>
                   ) : (
                     <>
-                      <div className="divide-y divide-[#1e2d4a]/60">
+                      <div className="divide-y divide-black/5">
                         {shownCatReviews.map(r => {
                           const hasText       = r.review_text.trim().length > 0
                           const isExpanded    = expandedReviews.has(r.id)
                           const isLong        = hasText && r.review_text.length > 300
-                          const displayText   = isLong && !isExpanded ? r.review_text.slice(0, 300) + '…' : r.review_text
+                          const displayText   = isLong && !isExpanded ? r.review_text.slice(0, 300) + '...' : r.review_text
                           const dateStr       = relativeDate(r.reviewed_at ?? r.created_at)
                           const needsResponse = r.sentiment === 'negative' && hasText
 
-                          const sentBorder =
-                            r.sentiment === 'positive' ? 'border-l-[4px] border-l-emerald-500/70' :
-                            r.sentiment === 'negative' ? 'border-l-[4px] border-l-red-500/70' :
-                            'border-l-[4px] border-l-gray-600/50'
-                          const avatarGrad =
-                            r.sentiment === 'positive' ? 'from-emerald-600 to-teal-700' :
-                            r.sentiment === 'negative' ? 'from-red-600 to-pink-700' :
-                            'from-purple-600 to-blue-600'
+                          const sentBorderL =
+                            r.sentiment === 'positive' ? 'border-l-[3px] border-l-emerald-400' :
+                            r.sentiment === 'negative' ? 'border-l-[3px] border-l-rose-400' :
+                            'border-l-[3px] border-l-black/10'
+                          const avatarBg =
+                            r.sentiment === 'positive' ? 'bg-emerald-100 text-emerald-700' :
+                            r.sentiment === 'negative' ? 'bg-rose-100 text-rose-700' :
+                            'bg-black/[0.05] text-black/40'
 
                           return (
                             <div
                               key={r.id}
-                              className={`px-4 sm:px-5 py-5 flex items-start gap-3.5 hover:bg-white/[0.022] transition-colors ${sentBorder}`}
+                              className={`px-4 sm:px-5 py-4 flex items-start gap-3.5 hover:bg-black/[0.015] transition-colors ${sentBorderL}`}
                             >
                               {/* Avatar */}
-                              <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${avatarGrad} flex items-center justify-center text-white text-sm font-bold flex-shrink-0 shadow-md mt-0.5`}>
+                              <div className={`w-9 h-9 rounded-[12px] ${avatarBg} flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5`}>
                                 {r.reviewer_name[0]?.toUpperCase() ?? '?'}
                               </div>
 
@@ -1309,14 +1237,14 @@ export default function Dashboard() {
                                 {/* Name + stars + date row */}
                                 <div className="flex items-center justify-between gap-2 flex-wrap">
                                   <div className="flex items-center gap-2 flex-wrap min-w-0">
-                                    <span className="text-[13px] font-semibold text-gray-100 truncate max-w-[180px]">{r.reviewer_name}</span>
+                                    <span className="text-[14px] font-semibold text-black/75 truncate max-w-[180px]">{r.reviewer_name}</span>
                                     <StarRating rating={r.rating} />
                                   </div>
-                                  {dateStr && <span className="text-[11px] text-gray-500 shrink-0">{dateStr}</span>}
+                                  {dateStr && <span className="text-[11px] text-black/30 shrink-0">{dateStr}</span>}
                                 </div>
 
                                 {/* Review text */}
-                                <p className={`text-[13px] leading-relaxed mt-2 ${hasText ? 'text-gray-300' : 'text-gray-600 italic'}`}>
+                                <p className={`text-[13px] leading-relaxed mt-1.5 ${hasText ? 'text-black/55' : 'text-black/25 italic'}`}>
                                   {hasText ? (
                                     <>
                                       {displayText}
@@ -1327,7 +1255,7 @@ export default function Dashboard() {
                                             isExpanded ? next.delete(r.id) : next.add(r.id)
                                             return next
                                           })}
-                                          className="ml-1 text-purple-400 hover:text-purple-300 underline"
+                                          className="ml-1 text-emerald-600 hover:text-emerald-500 underline text-xs"
                                         >
                                           {isExpanded ? 'less' : 'more'}
                                         </button>
@@ -1337,12 +1265,12 @@ export default function Dashboard() {
                                 </p>
 
                                 {/* Bottom row: sentiment badge + Respond button */}
-                                <div className="flex items-center justify-between mt-3 gap-2">
+                                <div className="flex items-center justify-between mt-2.5 gap-2">
                                   {r.sentiment && (
-                                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                                      r.sentiment === 'positive' ? 'bg-emerald-500/15 text-emerald-400' :
-                                      r.sentiment === 'negative' ? 'bg-red-500/15 text-red-400' :
-                                      'bg-gray-500/15 text-gray-400'
+                                    <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-[10px] ${
+                                      r.sentiment === 'positive' ? 'bg-emerald-50 text-emerald-600' :
+                                      r.sentiment === 'negative' ? 'bg-rose-50 text-rose-600' :
+                                      'bg-black/[0.04] text-black/40'
                                     }`}>
                                       {r.sentiment}
                                     </span>
@@ -1353,7 +1281,7 @@ export default function Dashboard() {
                                         setPendingReviewText(r.review_text)
                                         setPendingNavPage('responder')
                                       }}
-                                      className="ml-auto text-[11px] px-3 py-1 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
+                                      className="ml-auto btn-primary text-xs px-3 py-1"
                                     >
                                       Respond
                                     </button>
@@ -1365,14 +1293,14 @@ export default function Dashboard() {
                         })}
                       </div>
 
-                      {/* Load more — centered outline button */}
+                      {/* Load more */}
                       {catVisibleCount < catReviewList.length && (
-                        <div className="px-5 py-4 flex justify-center border-t border-[#1e2d4a]/50">
+                        <div className="px-5 py-4 flex justify-center border-t border-black/5">
                           <button
                             onClick={() => setCatVisibleCount(v => v + 10)}
-                            className="px-5 py-2 text-xs font-medium text-purple-400 border border-purple-500/30 rounded-lg hover:bg-purple-500/10 hover:border-purple-500/50 transition-all"
+                            className="px-5 py-2 text-xs font-medium text-black/45 border border-black/10 rounded-xl hover:bg-black/[0.03] hover:border-black/20 transition-all"
                           >
-                            Load 10 more · {catReviewList.length - catVisibleCount} remaining
+                            Load 10 more - {catReviewList.length - catVisibleCount} remaining
                           </button>
                         </div>
                       )}
@@ -1382,20 +1310,23 @@ export default function Dashboard() {
               </>
             )
           })() : !catLoading && (
-            <div className="px-6 py-5 text-center">
-              <p className="text-xs text-gray-500">
-                Click <span className="text-purple-400">✨ Generate Categories</span> to let AI detect themes in your reviews.
+            <div className="px-6 py-6 text-center">
+              <p className="text-xs text-black/30">
+                Click <span className="text-emerald-600 font-semibold">Generate Categories</span> to let AI detect themes in your reviews.
               </p>
             </div>
           )}
         </div>
       )}
 
+      {/* ── Empty state ── */}
       {reviews.length === 0 && !loading && (
-        <div className="card p-8 text-center">
-          <p className="text-3xl mb-3">📝</p>
-          <p className="text-sm text-gray-300 font-medium mb-1">No reviews yet</p>
-          <p className="text-xs text-gray-500">Reviews fetched from Google will appear here.</p>
+        <div className="glass-card p-12 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-4">
+            <FileText size={24} className="text-emerald-500" />
+          </div>
+          <p className="text-sm text-black/50 font-semibold mb-1">No reviews yet</p>
+          <p className="text-xs text-black/30">Reviews fetched from Google will appear here.</p>
         </div>
       )}
 

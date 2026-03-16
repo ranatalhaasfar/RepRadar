@@ -131,15 +131,15 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
   // Full-screen fetch loading overlay
   if (fetching) {
     return (
-      <div className="min-h-screen bg-[#080d1a] flex items-center justify-center p-4">
+      <div className="min-h-screen flex items-center justify-center p-4">
         <div className="w-full max-w-md text-center space-y-6">
           <div className="text-5xl animate-bounce">📡</div>
           <div>
-            <h2 className="text-xl font-bold text-gray-100 mb-2">Setting Up RepRadar</h2>
-            <p className="text-sm text-gray-400 leading-relaxed">{fetchMsg}</p>
+            <h2 className="text-xl font-bold text-black/80 mb-2">Setting Up RepRadar</h2>
+            <p className="text-sm text-black/40 leading-relaxed">{fetchMsg}</p>
           </div>
           <div className="flex justify-center">
-            <svg className="animate-spin h-8 w-8 text-purple-400" viewBox="0 0 24 24" fill="none">
+            <svg className="animate-spin h-8 w-8 text-emerald-600" viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
@@ -161,26 +161,26 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#080d1a] flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
 
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-1">
             <span className="text-3xl">📡</span>
-            <span className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
+            <span className="text-2xl font-bold bg-gradient-to-r from-emerald-500 to-cyan-400 bg-clip-text text-transparent">
               RepRadar
             </span>
           </div>
-          <p className="text-xs text-gray-600">Let's set up your reputation dashboard</p>
+          <p className="text-xs text-black/30">Let's set up your reputation dashboard</p>
         </div>
 
         {/* Progress bar */}
         <div className="flex items-center gap-2 mb-8 px-2">
           {STEPS.map((s, i) => (
             <div key={i} className="flex-1 flex flex-col items-center gap-1">
-              <div className={`w-full h-1 rounded-full transition-colors duration-300 ${i <= step ? 'bg-purple-500' : 'bg-[#1e2d4a]'}`} />
-              <span className={`text-[10px] ${i === step ? 'text-purple-400' : 'text-gray-600'}`}>
+              <div className={`w-full h-1 rounded-full transition-colors duration-300 ${i <= step ? 'bg-emerald-500' : 'bg-black/[0.06]'}`} />
+              <span className={`text-[10px] ${i === step ? 'text-emerald-600' : 'text-black/30'}`}>
                 {s.icon} {s.label}
               </span>
             </div>
@@ -194,8 +194,8 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
           {step === 0 && (
             <div className="space-y-4">
               <div>
-                <h2 className="text-lg font-bold text-gray-100 mb-1">What's your business called?</h2>
-                <p className="text-sm text-gray-500">This is how it will appear on your dashboard.</p>
+                <h2 className="text-lg font-bold text-black/80 mb-1">What's your business called?</h2>
+                <p className="text-sm text-black/35">This is how it will appear on your dashboard.</p>
               </div>
               <input
                 type="text"
@@ -213,8 +213,8 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
           {step === 1 && (
             <div className="space-y-4">
               <div>
-                <h2 className="text-lg font-bold text-gray-100 mb-1">What type of business is it?</h2>
-                <p className="text-sm text-gray-500">We'll tailor your insights to your industry.</p>
+                <h2 className="text-lg font-bold text-black/80 mb-1">What type of business is it?</h2>
+                <p className="text-sm text-black/35">We'll tailor your insights to your industry.</p>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {BUSINESS_TYPES.map(t => (
@@ -223,8 +223,8 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
                     onClick={() => setType(t)}
                     className={`px-4 py-3 rounded-xl text-sm font-medium border-2 transition-all duration-150 ${
                       type === t
-                        ? 'border-purple-500 bg-purple-500/10 text-purple-300'
-                        : 'border-[#1e2d4a] bg-[#080d1a] text-gray-400 hover:border-purple-500/40 hover:text-gray-200'
+                        ? 'border-emerald-400 bg-emerald-50 text-emerald-600'
+                        : 'border-black/10 bg-white/30 text-black/40 hover:border-emerald-300 hover:text-black/70'
                     }`}
                   >
                     {t}
@@ -238,8 +238,8 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
           {step === 2 && (
             <div className="space-y-4">
               <div>
-                <h2 className="text-lg font-bold text-gray-100 mb-1">Where is your business located?</h2>
-                <p className="text-sm text-gray-500">Enter the city or neighbourhood.</p>
+                <h2 className="text-lg font-bold text-black/80 mb-1">Where is your business located?</h2>
+                <p className="text-sm text-black/35">Enter the city or neighbourhood.</p>
               </div>
               <input
                 type="text"
@@ -257,17 +257,17 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
           {step === 3 && (
             <div className="space-y-5">
               <div>
-                <h2 className="text-lg font-bold text-gray-100 mb-1">Is this your business?</h2>
-                <p className="text-sm text-gray-500">We found this on Google Maps. Confirm to import your reviews.</p>
+                <h2 className="text-lg font-bold text-black/80 mb-1">Is this your business?</h2>
+                <p className="text-sm text-black/35">We found this on Google Maps. Confirm to import your reviews.</p>
               </div>
 
               {searching && (
                 <div className="flex items-center gap-3 py-6 justify-center">
-                  <svg className="animate-spin h-5 w-5 text-purple-400" viewBox="0 0 24 24" fill="none">
+                  <svg className="animate-spin h-5 w-5 text-emerald-600" viewBox="0 0 24 24" fill="none">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  <span className="text-sm text-gray-400">Searching Google Maps…</span>
+                  <span className="text-sm text-black/40">Searching Google Maps…</span>
                 </div>
               )}
 
@@ -278,12 +278,12 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
               )}
 
               {searchResult && !searching && (
-                <div className="bg-[#080d1a] border border-purple-500/30 rounded-xl p-5 space-y-3">
+                <div className="bg-white/30 border border-emerald-300/50 rounded-xl p-5 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-semibold text-gray-100 text-base">{searchResult.name}</p>
+                      <p className="font-semibold text-black/80 text-base">{searchResult.name}</p>
                       {searchResult.full_address && (
-                        <p className="text-xs text-gray-500 mt-0.5">{searchResult.full_address}</p>
+                        <p className="text-xs text-black/35 mt-0.5">{searchResult.full_address}</p>
                       )}
                     </div>
                     <span className="text-green-400 text-xl shrink-0">📍</span>
@@ -292,12 +292,12 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
                     {searchResult.rating !== null && (
                       <div className="flex items-center gap-1">
                         <span className="text-yellow-400 text-sm">★</span>
-                        <span className="text-sm font-semibold text-gray-200">{searchResult.rating.toFixed(1)}</span>
-                        <span className="text-xs text-gray-500">Google rating</span>
+                        <span className="text-sm font-semibold text-black/70">{searchResult.rating.toFixed(1)}</span>
+                        <span className="text-xs text-black/35">Google rating</span>
                       </div>
                     )}
                     {searchResult.reviews_count !== null && (
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-black/35">
                         {searchResult.reviews_count.toLocaleString()} reviews
                       </div>
                     )}
@@ -317,7 +317,7 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
           {/* Nav buttons */}
           <div className="flex items-center justify-between mt-6">
             {step > 0 ? (
-              <button onClick={back} className="text-sm text-gray-500 hover:text-gray-200 transition-colors px-4 py-2">
+              <button onClick={back} className="text-sm text-black/35 hover:text-black/70 transition-colors px-4 py-2">
                 ← Back
               </button>
             ) : <div />}
@@ -378,11 +378,11 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
 
         {/* Skip / manual entry fallback */}
         {step === 3 && searchError && !searching && (
-          <p className="text-center text-xs text-gray-600 mt-4">
+          <p className="text-center text-xs text-black/30 mt-4">
             Can't find your business?{' '}
             <button
               onClick={() => setStep(0)}
-              className="text-purple-500 hover:text-purple-400 underline"
+              className="text-emerald-600 hover:text-emerald-600 underline"
             >
               Edit your details
             </button>

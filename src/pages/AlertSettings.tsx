@@ -21,7 +21,7 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean
     <button
       onClick={() => onChange(!enabled)}
       className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 flex-shrink-0 ${
-        enabled ? 'bg-purple-600' : 'bg-[#1e2d4a]'
+        enabled ? 'bg-emerald-500' : 'bg-black/[0.12]'
       }`}
     >
       <span
@@ -36,8 +36,8 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="card overflow-hidden">
-      <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-[#1e2d4a]">
-        <h3 className="text-sm font-semibold text-gray-200">{title}</h3>
+      <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-black/10">
+        <h3 className="text-sm font-semibold text-black/70">{title}</h3>
       </div>
       <div className="p-4 sm:p-6">{children}</div>
     </div>
@@ -80,8 +80,8 @@ export default function AlertSettings() {
 
       {/* Header */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-100">Alert Settings</h1>
-        <p className="text-gray-500 text-sm mt-1">
+        <h1 className="text-xl sm:text-2xl font-bold text-black/80">Alert Settings</h1>
+        <p className="text-black/35 text-sm mt-1">
           Configure how and when RepRadar notifies you about your reputation.
         </p>
       </div>
@@ -91,14 +91,14 @@ export default function AlertSettings() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-200">Enable email notifications</p>
-              <p className="text-xs text-gray-500 mt-0.5">Receive alerts directly in your inbox</p>
+              <p className="text-sm font-medium text-black/70">Enable email notifications</p>
+              <p className="text-xs text-black/35 mt-0.5">Receive alerts directly in your inbox</p>
             </div>
             <Toggle enabled={emailEnabled} onChange={setEmailEnabled} />
           </div>
           {emailEnabled && (
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">
+              <label className="block text-xs font-medium text-black/40 mb-2 uppercase tracking-wider">
                 Email Address
               </label>
               <input
@@ -121,14 +121,14 @@ export default function AlertSettings() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-200">Enable SMS notifications</p>
-              <p className="text-xs text-gray-500 mt-0.5">Get instant text alerts for critical reviews</p>
+              <p className="text-sm font-medium text-black/70">Enable SMS notifications</p>
+              <p className="text-xs text-black/35 mt-0.5">Get instant text alerts for critical reviews</p>
             </div>
             <Toggle enabled={smsEnabled} onChange={setSmsEnabled} />
           </div>
           {smsEnabled && (
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">
+              <label className="block text-xs font-medium text-black/40 mb-2 uppercase tracking-wider">
                 Phone Number
               </label>
               <input
@@ -141,7 +141,7 @@ export default function AlertSettings() {
               {errors.phone && (
                 <p className="text-xs text-red-400 mt-1">{errors.phone}</p>
               )}
-              <p className="text-xs text-gray-600 mt-1">Standard message rates may apply.</p>
+              <p className="text-xs text-black/30 mt-1">Standard message rates may apply.</p>
             </div>
           )}
         </div>
@@ -153,8 +153,8 @@ export default function AlertSettings() {
           {alerts.map(alert => (
             <div key={alert.id} className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-200">{alert.label}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{alert.description}</p>
+                <p className="text-sm font-medium text-black/70">{alert.label}</p>
+                <p className="text-xs text-black/35 mt-0.5">{alert.description}</p>
               </div>
               <Toggle enabled={alert.enabled} onChange={v => toggleAlert(alert.id, v)} />
             </div>
@@ -165,7 +165,7 @@ export default function AlertSettings() {
       {/* Notification frequency */}
       <Section title="⏱ Notification Frequency">
         <div className="space-y-3">
-          <p className="text-xs text-gray-500 mb-4">
+          <p className="text-xs text-black/35 mb-4">
             Set the maximum frequency for non-critical alerts to avoid notification fatigue.
           </p>
           {(['Immediately', 'Every hour', 'Daily digest', 'Weekly only'] as const).map(freq => (
@@ -174,9 +174,9 @@ export default function AlertSettings() {
                 type="radio"
                 name="frequency"
                 defaultChecked={freq === 'Immediately'}
-                className="accent-purple-500"
+                className="accent-emerald-500"
               />
-              <span className="text-sm text-gray-300 group-hover:text-gray-100 transition-colors">
+              <span className="text-sm text-black/60 group-hover:text-black/80 transition-colors">
                 {freq}
               </span>
             </label>
@@ -193,7 +193,7 @@ export default function AlertSettings() {
           Save Settings
         </button>
         {saved && (
-          <div className="flex items-center gap-2 text-emerald-400 text-sm animate-pulse">
+          <div className="flex items-center gap-2 text-emerald-600 text-sm">
             <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
             </svg>
