@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import { searchBusiness as outscraperSearch } from '../lib/useOutscraperSearch'
-import type { SearchResult } from '../lib/useOutscraperSearch'
 
 const BUSINESS_TYPES = ['Restaurant', 'Retail', 'Cafe', 'Salon', 'Bar', 'Other']
 
@@ -20,6 +18,13 @@ const STEPS = [
   { label: 'Confirm',       icon: '✅' },
 ]
 
+type SearchResult = {
+  place_id:      string
+  name:          string
+  full_address:  string | null
+  rating:        number | null
+  reviews_count: number | null
+}
 
 export default function Onboarding({ onComplete }: { onComplete: () => void }) {
   const { user } = useAuth()
@@ -31,10 +36,9 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
   const [location, setLocation] = useState('')
 
   // Search state
-  const [searching, setSearching]         = useState(false)
-  const [searchMsg, setSearchMsg]         = useState('Searching Google Maps…')
-  const [searchResult, setSearchResult]   = useState<SearchResult | null>(null)
-  const [searchError, setSearchError]     = useState('')
+  const [searching, setSearching]       = useState(false)
+  const [searchResult, setSearchResult] = useState<SearchResult | null>(null)
+  const [searchError, setSearchError]   = useState('')
 
   // Fetch / save state
   const [fetching, setFetching]   = useState(false)
@@ -61,16 +65,21 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
 
   const searchBusiness = async () => {
     setSearching(true)
-    setSearchMsg('Searching Google Maps…')
     setSearchError('')
     setSearchResult(null)
     setStep(3)
     try {
-      const result = await outscraperSearch(name, location, setSearchMsg)
-      if (!result) {
+      const params = new URLSearchParams({ name: name.trim(), city: location.trim() })
+      const res = await fetch(`/api/outscraper-search?${params}`)
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error ?? `Search failed (${res.status})`)
+      }
+      const data = await res.json()
+      if (!data.found) {
         setSearchError(`We couldn't find "${name.trim()}" in ${location.trim()} on Google Maps. Please check the name and try again.`)
       } else {
-        setSearchResult(result)
+        setSearchResult(data)
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Search failed'
@@ -258,7 +267,7 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  <span className="text-sm text-black/40">{searchMsg}</span>
+                  <span className="text-sm text-black/40">Searching Google Maps…</span>
                 </div>
               )}
 
