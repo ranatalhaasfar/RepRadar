@@ -69,6 +69,7 @@ export default function AddBusiness({
   }
 
   // ── Step 3: search Google Maps via Outscraper ───────────────────────────
+  // Submit the job, then poll client-side to avoid Vercel 10s function limit.
 
   const searchBusiness = async () => {
     setSearching(true)
@@ -76,6 +77,7 @@ export default function AddBusiness({
     setSearchResult(null)
     setStep(3)
     try {
+      // 1. Submit
       const params = new URLSearchParams({ name: name.trim(), city: location.trim() })
       const res = await fetch(`/api/outscraper-search?${params}`)
       if (!res.ok) {
@@ -83,11 +85,38 @@ export default function AddBusiness({
         throw new Error(d.error ?? `Search failed (${res.status})`)
       }
       const data = await res.json()
-      if (!data.found) {
-        setSearchError(`We couldn't find "${name.trim()}" in ${location.trim()} on Google Maps. Please check the name and try again.`)
-      } else {
-        setSearchResult(data)
+
+      // 2. Sync result
+      if (data.ready) {
+        if (!data.found) {
+          setSearchError(`We couldn't find "${name.trim()}" in ${location.trim()} on Google Maps. Please check the name and try again.`)
+        } else {
+          setSearchResult(data)
+        }
+        return
       }
+
+      // 3. Async — poll from client (up to 20 × 3s = 60s)
+      const { resultsUrl } = data
+      if (!resultsUrl) throw new Error('No results URL returned from search.')
+
+      for (let i = 0; i < 20; i++) {
+        await new Promise(r => setTimeout(r, 3000))
+        const pollParams = new URLSearchParams({ poll: '1', resultsUrl })
+        const pollRes = await fetch(`/api/outscraper-search?${pollParams}`)
+        if (!pollRes.ok) continue
+        const pollData = await pollRes.json()
+        if (pollData.ready) {
+          if (!pollData.found) {
+            setSearchError(`We couldn't find "${name.trim()}" in ${location.trim()} on Google Maps. Please check the name and try again.`)
+          } else {
+            setSearchResult(pollData)
+          }
+          return
+        }
+      }
+
+      throw new Error('Search timed out. Please try again.')
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Search failed'
       setSearchError(msg)
